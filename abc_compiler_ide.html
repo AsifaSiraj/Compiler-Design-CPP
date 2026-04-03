@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC Tech Compiler — Lightweight C++ Subset IDE</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0b0f;
+    --surface: #11131a;
+    --surface2: #181c27;
+    --surface3: #1e2335;
+    --border: #252c40;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --accent3: #a78bfa;
+    --error: #f87171;
+    --warn: #fb923c;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #475569;
+    --token-kw: #a78bfa;
+    --token-type: #22d3ee;
+    --token-num: #fb923c;
+    --token-str: #4ade80;
+    --token-op: #f472b6;
+    --token-id: #e2e8f0;
+    --token-comment: #475569;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; }
+
+  /* ── HEADER ── */
+  header {
+    height: 52px; display:flex; align-items:center; justify-content:space-between;
+    padding: 0 20px; background:var(--surface); border-bottom:1px solid var(--border);
+    position:relative; z-index:10;
+  }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon { width:32px; height:32px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:#000; }
+  .logo-text { font-family:'Syne',sans-serif; font-weight:800; font-size:16px; letter-spacing:-0.5px; }
+  .logo-text span { color:var(--accent); }
+  .badge { font-size:10px; background:var(--surface3); color:var(--text2); padding:2px 8px; border-radius:20px; border:1px solid var(--border); }
+  
+  .header-actions { display:flex; align-items:center; gap:10px; }
+  .btn { padding:6px 16px; border-radius:6px; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:500; transition:all .15s; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-primary:hover { background:#22c55e; transform:translateY(-1px); box-shadow:0 4px 20px rgba(74,222,128,.3); }
+  .btn-primary:active { transform:translateY(0); }
+  .btn-secondary { background:var(--surface3); color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover { background:var(--border); }
+  .btn-danger { background:rgba(248,113,113,.15); color:var(--error); border:1px solid rgba(248,113,113,.3); }
+  .btn-danger:hover { background:rgba(248,113,113,.25); }
+
+  /* ── LAYOUT ── */
+  .main-layout { display:grid; grid-template-columns:220px 1fr 1fr; height:calc(100vh - 52px); }
+
+  /* ── SIDEBAR ── */
+  .sidebar { background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  .sidebar-section { padding:12px; border-bottom:1px solid var(--border); }
+  .sidebar-title { font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--text3); margin-bottom:8px; }
+  .example-btn { width:100%; text-align:left; padding:7px 10px; background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text2); font-size:11px; font-family:'JetBrains Mono',monospace; cursor:pointer; transition:all .12s; display:flex; align-items:center; gap:8px; }
+  .example-btn:hover { background:var(--surface2); border-color:var(--border); color:var(--text); }
+  .example-btn.active { background:rgba(74,222,128,.1); border-color:rgba(74,222,128,.3); color:var(--accent); }
+  .example-icon { font-size:14px; }
+  .phase-list { flex:1; overflow-y:auto; padding:12px; }
+  .phase-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; margin-bottom:4px; border:1px solid transparent; }
+  .phase-item.ok { background:rgba(74,222,128,.06); border-color:rgba(74,222,128,.15); }
+  .phase-item.error { background:rgba(248,113,113,.06); border-color:rgba(248,113,113,.15); }
+  .phase-item.idle { background:var(--surface2); border-color:var(--border); }
+  .phase-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .phase-dot.ok { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+  .phase-dot.error { background:var(--error); box-shadow:0 0 6px var(--error); }
+  .phase-dot.idle { background:var(--text3); }
+  .phase-name { font-size:11px; font-weight:500; flex:1; }
+  .phase-time { font-size:10px; color:var(--text3); }
+
+  .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:12px; }
+  .stat-card { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:8px; }
+  .stat-val { font-size:18px; font-weight:700; color:var(--accent2); font-family:'Syne',sans-serif; }
+  .stat-label { font-size:9px; color:var(--text3); text-transform:uppercase; letter-spacing:1px; }
+
+  /* ── EDITOR PANEL ── */
+  .editor-panel { display:flex; flex-direction:column; border-right:1px solid var(--border); overflow:hidden; }
+  .panel-header { padding:8px 16px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .panel-title { font-size:11px; color:var(--text2); display:flex; align-items:center; gap:8px; }
+  .panel-title .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 4px var(--accent); }
+  .panel-tabs { display:flex; gap:4px; }
+  .tab { padding:4px 10px; border-radius:4px; font-size:10px; cursor:pointer; border:1px solid transparent; color:var(--text3); background:transparent; font-family:'JetBrains Mono',monospace; }
+  .tab.active { background:var(--surface3); border-color:var(--border); color:var(--text); }
+  .tab:hover:not(.active) { color:var(--text2); }
+
+  .editor-wrap { flex:1; overflow:hidden; position:relative; display:flex; }
+  .line-numbers { padding:16px 0; background:var(--surface); border-right:1px solid var(--border); min-width:48px; overflow:hidden; }
+  .line-num { height:22px; line-height:22px; text-align:right; padding-right:12px; font-size:12px; color:var(--text3); user-select:none; }
+  .code-area { flex:1; overflow:auto; position:relative; }
+  .code-editor { width:100%; height:100%; min-height:100%; padding:16px; font-size:13px; line-height:22px; background:transparent; border:none; outline:none; resize:none; color:var(--text); caret-color:var(--accent); font-family:'JetBrains Mono',monospace; tab-size:2; white-space:pre; overflow-wrap:normal; }
+
+  /* ── OUTPUT PANEL ── */
+  .output-panel { display:flex; flex-direction:column; overflow:hidden; }
+  .output-tabs { display:flex; background:var(--surface); border-bottom:1px solid var(--border); }
+  .output-tab { padding:9px 16px; font-size:11px; color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; display:flex; align-items:center; gap:6px; transition:all .12s; font-family:'JetBrains Mono',monospace; }
+  .output-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .output-tab:hover:not(.active) { color:var(--text2); }
+  .badge-count { background:var(--error); color:#fff; border-radius:20px; padding:1px 6px; font-size:9px; }
+  .output-content { flex:1; overflow:auto; padding:16px; font-size:12px; line-height:1.7; }
+
+  /* Output content specific */
+  .output-line { display:flex; align-items:flex-start; gap:8px; padding:2px 0; }
+  .output-prompt { color:var(--accent); flex-shrink:0; }
+  .output-text { color:var(--text); white-space:pre-wrap; word-break:break-all; }
+  .output-empty { color:var(--text3); font-style:italic; padding:20px 0; text-align:center; }
+
+  .error-item { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2); border-radius:6px; padding:10px 14px; margin-bottom:8px; }
+  .error-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .error-badge { background:var(--error); color:#fff; padding:1px 8px; border-radius:3px; font-size:10px; font-weight:600; }
+  .error-phase { color:var(--warn); font-size:11px; }
+  .error-msg { color:var(--error); font-size:12px; }
+  .error-loc { color:var(--text3); font-size:11px; margin-top:2px; }
+
+  /* IR display */
+  .ir-view { font-size:12px; line-height:1.8; }
+  .ir-line { display:flex; gap:16px; }
+  .ir-num { color:var(--text3); min-width:36px; }
+  .ir-label { color:var(--accent); font-weight:600; }
+  .ir-assign { color:var(--accent2); }
+  .ir-jump { color:var(--accent3); }
+  .ir-func { color:var(--warn); font-weight:600; }
+  .ir-op { color:var(--token-op); }
+  .ir-default { color:var(--text2); }
+
+  /* Token view */
+  .token-grid { display:grid; grid-template-columns:auto auto 1fr auto; gap:4px 16px; align-items:center; }
+  .token-row:hover { background:rgba(255,255,255,.03); border-radius:4px; }
+  .token-idx { color:var(--text3); font-size:10px; }
+  .token-type { font-size:10px; padding:1px 8px; border-radius:3px; }
+  .tk-kw { background:rgba(167,139,250,.15); color:var(--token-kw); }
+  .tk-lit { background:rgba(251,146,60,.15); color:var(--token-num); }
+  .tk-id { background:rgba(226,232,240,.08); color:var(--token-id); }
+  .tk-op { background:rgba(244,114,182,.15); color:var(--token-op); }
+  .tk-delim { background:rgba(148,163,184,.1); color:var(--text2); }
+  .token-val { font-size:11px; color:var(--text); }
+  .token-loc { font-size:10px; color:var(--text3); }
+
+  /* AST view */
+  .ast-node { margin-left:16px; border-left:1px solid var(--border); padding-left:12px; }
+  .ast-node-header { display:flex; align-items:center; gap:8px; cursor:pointer; padding:2px 0; }
+  .ast-node-type { font-size:11px; font-weight:600; }
+  .ast-prop { font-size:10px; color:var(--text3); }
+  .ast-color-Program { color:#f472b6; }
+  .ast-color-FuncDecl { color:var(--warn); }
+  .ast-color-VarDecl { color:var(--accent2); }
+  .ast-color-If,.ast-color-While,.ast-color-For { color:var(--accent3); }
+  .ast-color-BinOp,.ast-color-Assign { color:var(--token-op); }
+  .ast-color-Var,.ast-color-IntLit,.ast-color-BoolLit { color:var(--accent); }
+  .ast-color-Block { color:var(--text2); }
+  .ast-color-Return,.ast-color-Print { color:var(--accent2); }
+
+  /* Assembly view */
+  .asm-view { font-size:12px; line-height:1.9; }
+  .asm-line { }
+  .asm-section { color:var(--warn); font-weight:600; }
+  .asm-label { color:var(--accent); font-weight:600; }
+  .asm-instr { color:var(--text); padding-left:20px; }
+  .asm-reg { color:var(--accent2); }
+  .asm-comment { color:var(--token-comment); }
+
+  /* Success / error banners */
+  .status-bar { padding:6px 16px; font-size:11px; display:flex; align-items:center; gap:10px; border-top:1px solid var(--border); background:var(--surface); }
+  .status-ok { color:var(--accent); }
+  .status-error { color:var(--error); }
+  .status-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--text3); }
+
+  /* Animations */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .compiling .phase-dot.ok { animation:pulse .8s infinite; }
+
+  .run-hint { display:flex; align-items:center; gap:8px; padding:20px; color:var(--text3); font-size:11px; }
+  
+  /* Mobile guard */
+  @media(max-width:900px){
+    .main-layout{grid-template-columns:1fr}
+    .sidebar,.output-panel{display:none}
+  }
+
+  .highlighted-code { position:absolute; top:0; left:0; right:0; bottom:0; padding:16px; font-size:13px; line-height:22px; pointer-events:none; white-space:pre; overflow:hidden; font-family:'JetBrains Mono',monospace; }
+  .code-overlay { position:relative; flex:1; overflow:hidden; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">C++</div>
+    <div class="logo-text">ABC<span>Tech</span> Compiler</div>
+    <div class="badge">v1.0 — Lightweight C++ Subset</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-secondary" onclick="clearEditor()">Clear</button>
+    <button class="btn btn-secondary" onclick="formatCode()">Format</button>
+    <button class="btn btn-primary" onclick="runCompiler()" id="runBtn">▶ Compile & Run</button>
+  </div>
+</header>
+
+<div class="main-layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Examples</div>
+      <button class="example-btn active" onclick="loadExample('hello')" id="ex-hello">
+        <span class="example-icon">👋</span>Hello World
+      </button>
+      <button class="example-btn" onclick="loadExample('fibonacci')" id="ex-fibonacci">
+        <span class="example-icon">🔢</span>Fibonacci
+      </button>
+      <button class="example-btn" onclick="loadExample('factorial')" id="ex-factorial">
+        <span class="example-icon">📐</span>Factorial
+      </button>
+      <button class="example-btn" onclick="loadExample('bubblesort')" id="ex-bubblesort">
+        <span class="example-icon">📊</span>Bubble Sort Sim
+      </button>
+      <button class="example-btn" onclick="loadExample('primes')" id="ex-primes">
+        <span class="example-icon">🔑</span>Prime Numbers
+      </button>
+      <button class="example-btn" onclick="loadExample('scope')" id="ex-scope">
+        <span class="example-icon">🔭</span>Scope & Functions
+      </button>
+      <button class="example-btn" onclick="loadExample('errors')" id="ex-errors">
+        <span class="example-icon">⚠️</span>Error Demo
+      </button>
+    </div>
+
+    <div class="sidebar-title" style="padding:12px 12px 4px">Pipeline</div>
+    <div id="phaseList" class="phase-list">
+      <div class="phase-item idle" id="ph-lexer"><div class="phase-dot idle" id="pd-lexer"></div><div class="phase-name">Lexer</div><div class="phase-time" id="pt-lexer">—</div></div>
+      <div class="phase-item idle" id="ph-parser"><div class="phase-dot idle" id="pd-parser"></div><div class="phase-name">Parser</div><div class="phase-time" id="pt-parser">—</div></div>
+      <div class="phase-item idle" id="ph-semantic"><div class="phase-dot idle" id="pd-semantic"></div><div class="phase-name">Semantic</div><div class="phase-time" id="pt-semantic">—</div></div>
+      <div class="phase-item idle" id="ph-irgen"><div class="phase-dot idle" id="pd-irgen"></div><div class="phase-name">IR Gen</div><div class="phase-time" id="pt-irgen">—</div></div>
+      <div class="phase-item idle" id="ph-asm"><div class="phase-dot idle" id="pd-asm"></div><div class="phase-name">Asm Gen</div><div class="phase-time" id="pt-asm">—</div></div>
+      <div class="phase-item idle" id="ph-vm"><div class="phase-dot idle" id="pd-vm"></div><div class="phase-name">VM Execute</div><div class="phase-time" id="pt-vm">—</div></div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val" id="s-lines">0</div><div class="stat-label">Lines</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-tokens">0</div><div class="stat-label">Tokens</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-instrs">0</div><div class="stat-label">IR Instrs</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-errors" style="color:var(--error)">0</div><div class="stat-label">Errors</div></div>
+    </div>
+  </div>
+
+  <!-- EDITOR -->
+  <div class="editor-panel">
+    <div class="panel-header">
+      <div class="panel-title"><div class="dot"></div>main.cpp — Editor</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="cursorPos" style="font-size:10px;color:var(--text3)">Ln 1, Col 1</div>
+        <div style="font-size:10px;background:rgba(74,222,128,.1);color:var(--accent);padding:1px 8px;border-radius:3px;">C++ Subset</div>
+      </div>
+    </div>
+    <div class="editor-wrap">
+      <div class="line-numbers" id="lineNumbers"><div class="line-num">1</div></div>
+      <div class="code-area">
+        <textarea class="code-editor" id="codeEditor" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+      </div>
+    </div>
+    <div class="status-bar" id="statusBar">
+      <div class="status-dot" style="background:var(--text3)"></div>
+      <span style="color:var(--text3)">Ready — press Compile & Run to begin</span>
+    </div>
+  </div>
+
+  <!-- OUTPUT PANEL -->
+  <div class="output-panel">
+    <div class="output-tabs">
+      <div class="output-tab active" onclick="showTab('output')" id="tab-output">▶ Output</div>
+      <div class="output-tab" onclick="showTab('errors')" id="tab-errors">⚠ Errors <span class="badge-count" id="errCount" style="display:none">0</span></div>
+      <div class="output-tab" onclick="showTab('tokens')" id="tab-tokens">◈ Tokens</div>
+      <div class="output-tab" onclick="showTab('ast')" id="tab-ast">⟨⟩ AST</div>
+      <div class="output-tab" onclick="showTab('ir')" id="tab-ir">⊞ IR</div>
+      <div class="output-tab" onclick="showTab('asm')" id="tab-asm">≋ Assembly</div>
+    </div>
+    <div class="output-content" id="outputContent">
+      <div class="run-hint">▶ Load an example or write code, then click <strong style="color:var(--accent);margin:0 4px">Compile &amp; Run</strong></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// EMBED COMPILER ENGINE (inline for single-file distribution)
+// ═══════════════════════════════════════════════════════════
+</script>
+<script>
+// ── Token Types ──
+const TokenType={INT_LITERAL:'INT_LITERAL',BOOL_LITERAL:'BOOL_LITERAL',STRING_LITERAL:'STRING_LITERAL',INT:'int',BOOL:'bool',VOID:'void',IF:'if',ELSE:'else',WHILE:'while',FOR:'for',RETURN:'return',BREAK:'break',CONTINUE:'continue',PRINT:'print',INPUT:'input',TRUE:'true',FALSE:'false',IDENTIFIER:'IDENTIFIER',PLUS:'+',MINUS:'-',STAR:'*',SLASH:'/',PERCENT:'%',ASSIGN:'=',EQ:'==',NEQ:'!=',LT:'<',GT:'>',LTE:'<=',GTE:'>=',AND:'&&',OR:'||',NOT:'!',LPAREN:'(',RPAREN:')',LBRACE:'{',RBRACE:'}',SEMICOLON:';',COMMA:',',EOF:'EOF'};
+const KEYWORDS={int:TokenType.INT,bool:TokenType.BOOL,void:TokenType.VOID,if:TokenType.IF,else:TokenType.ELSE,while:TokenType.WHILE,for:TokenType.FOR,return:TokenType.RETURN,break:TokenType.BREAK,continue:TokenType.CONTINUE,print:TokenType.PRINT,input:TokenType.INPUT,true:TokenType.TRUE,false:TokenType.FALSE};
+class Token{constructor(t,v,l,c){this.type=t;this.value=v;this.line=l;this.col=c;}}
+class LexerError extends Error{constructor(m,l,c){super(m);this.line=l;this.col=c;this.phase='Lexer';}}
+class Lexer{constructor(s){this.source=s;this.pos=0;this.line=1;this.col=1;this.tokens=[];}
+  error(m){throw new LexerError(m,this.line,this.col);}
+  peek(o=0){return this.source[this.pos+o]||'';}
+  advance(){const c=this.source[this.pos++];if(c==='\n'){this.line++;this.col=1;}else this.col++;return c;}
+  match(c){if(this.peek()===c){this.advance();return true;}return false;}
+  skipWC(){while(this.pos<this.source.length){const c=this.peek();if(c===' '||c==='\t'||c==='\r'||c==='\n'){this.advance();}else if(c==='/'&&this.peek(1)==='/'){while(this.pos<this.source.length&&this.peek()!=='\n')this.advance();}else if(c==='/'&&this.peek(1)==='*'){this.advance();this.advance();while(this.pos<this.source.length){if(this.peek()==='*'&&this.peek(1)==='/'){this.advance();this.advance();break;}this.advance();}}else break;}}
+  readNum(){const sl=this.line,sc=this.col;let n='';while(this.pos<this.source.length&&/\d/.test(this.peek()))n+=this.advance();return new Token(TokenType.INT_LITERAL,parseInt(n,10),sl,sc);}
+  readId(){const sl=this.line,sc=this.col;let id='';while(this.pos<this.source.length&&/[a-zA-Z0-9_]/.test(this.peek()))id+=this.advance();const t=KEYWORDS[id]||TokenType.IDENTIFIER;const v=t===TokenType.TRUE?true:t===TokenType.FALSE?false:id;return new Token(t,v,sl,sc);}
+  readStr(){const sl=this.line,sc=this.col;this.advance();let s='';while(this.pos<this.source.length&&this.peek()!=='"'){if(this.peek()==='\\'){this.advance();const e=this.advance();s+=e==='n'?'\n':e==='t'?'\t':e;}else s+=this.advance();}if(this.pos>=this.source.length)this.error('Unterminated string');this.advance();return new Token(TokenType.STRING_LITERAL,s,sl,sc);}
+  tokenize(){while(true){this.skipWC();if(this.pos>=this.source.length){this.tokens.push(new Token(TokenType.EOF,null,this.line,this.col));break;}const sl=this.line,sc=this.col,ch=this.peek();if(/\d/.test(ch)){this.tokens.push(this.readNum());continue;}if(/[a-zA-Z_]/.test(ch)){this.tokens.push(this.readId());continue;}if(ch==='"'){this.tokens.push(this.readStr());continue;}this.advance();const mk=(t,v)=>new Token(t,v,sl,sc);let tok;switch(ch){case'+':tok=mk(TokenType.PLUS,'+');break;case'-':tok=mk(TokenType.MINUS,'-');break;case'*':tok=mk(TokenType.STAR,'*');break;case'/':tok=mk(TokenType.SLASH,'/');break;case'%':tok=mk(TokenType.PERCENT,'%');break;case'=':tok=this.match('=')?mk(TokenType.EQ,'=='):mk(TokenType.ASSIGN,'=');break;case'!':tok=this.match('=')?mk(TokenType.NEQ,'!='):mk(TokenType.NOT,'!');break;case'<':tok=this.match('=')?mk(TokenType.LTE,'<='):mk(TokenType.LT,'<');break;case'>':tok=this.match('=')?mk(TokenType.GTE,'>='):mk(TokenType.GT,'>');break;case'&':if(this.match('&'))tok=mk(TokenType.AND,'&&');else this.error("Expected '&&'");break;case'|':if(this.match('|'))tok=mk(TokenType.OR,'||');else this.error("Expected '||'");break;case'(':tok=mk(TokenType.LPAREN,'(');break;case')':tok=mk(TokenType.RPAREN,')');break;case'{':tok=mk(TokenType.LBRACE,'{');break;case'}':tok=mk(TokenType.RBRACE,'}');break;case';':tok=mk(TokenType.SEMICOLON,';');break;case',':tok=mk(TokenType.COMMA,',');break;default:this.error(`Unknown character '${ch}'`);}if(tok)this.tokens.push(tok);}return this.tokens;}}
+
+// ── AST Nodes ──
+class ASTNode{constructor(t,l){this.type=t;this.line=l;}}
+class ProgramNode extends ASTNode{constructor(d,l){super('Program',l);this.declarations=d;}}
+class VarDeclNode extends ASTNode{constructor(vt,n,i,l){super('VarDecl',l);this.varType=vt;this.name=n;this.init=i;}}
+class FuncDeclNode extends ASTNode{constructor(r,n,p,b,l){super('FuncDecl',l);this.retType=r;this.name=n;this.params=p;this.body=b;}}
+class BlockNode extends ASTNode{constructor(s,l){super('Block',l);this.statements=s;}}
+class IfNode extends ASTNode{constructor(c,t,e,l){super('If',l);this.condition=c;this.thenBranch=t;this.elseBranch=e;}}
+class WhileNode extends ASTNode{constructor(c,b,l){super('While',l);this.condition=c;this.body=b;}}
+class ForNode extends ASTNode{constructor(i,c,n,b,l){super('For',l);this.init=i;this.condition=c;this.increment=n;this.body=b;}}
+class ReturnNode extends ASTNode{constructor(v,l){super('Return',l);this.value=v;}}
+class BreakNode extends ASTNode{constructor(l){super('Break',l);}}
+class ContinueNode extends ASTNode{constructor(l){super('Continue',l);}}
+class PrintNode extends ASTNode{constructor(a,l){super('Print',l);this.args=a;}}
+class ExprStmtNode extends ASTNode{constructor(e,l){super('ExprStmt',l);this.expression=e;}}
+class AssignNode extends ASTNode{constructor(n,v,l){super('Assign',l);this.name=n;this.value=v;}}
+class BinOpNode extends ASTNode{constructor(o,l,r,ln){super('BinOp',ln);this.op=o;this.left=l;this.right=r;}}
+class UnaryNode extends ASTNode{constructor(o,e,l){super('Unary',l);this.op=o;this.expr=e;}}
+class CallNode extends ASTNode{constructor(n,a,l){super('Call',l);this.name=n;this.args=a;}}
+class VarNode extends ASTNode{constructor(n,l){super('Var',l);this.name=n;}}
+class IntLitNode extends ASTNode{constructor(v,l){super('IntLit',l);this.value=v;}}
+class BoolLitNode extends ASTNode{constructor(v,l){super('BoolLit',l);this.value=v;}}
+class StringLitNode extends ASTNode{constructor(v,l){super('StringLit',l);this.value=v;}}
+
+// ── Parser ──
+class ParseError extends Error{constructor(m,t){super(m);this.token=t;this.phase='Parser';this.line=t?.line;this.col=t?.col;}}
+class Parser{
+  constructor(t){this.tokens=t;this.pos=0;}
+  peek(){return this.tokens[this.pos];}prev(){return this.tokens[this.pos-1];}isEnd(){return this.peek().type===TokenType.EOF;}advance(){if(!this.isEnd())this.pos++;return this.prev();}check(t){return this.peek().type===t;}
+  match(...ts){for(const t of ts){if(this.check(t)){this.advance();return true;}}return false;}
+  consume(t,m){if(this.check(t))return this.advance();throw new ParseError(`${m} — got '${this.peek().value??this.peek().type}' at line ${this.peek().line}`,this.peek());}
+  parse(){const d=[],l=this.peek().line;while(!this.isEnd())d.push(this.parseDecl());return new ProgramNode(d,l);}
+  isType(){return[TokenType.INT,TokenType.BOOL,TokenType.VOID].includes(this.peek().type);}
+  parseDecl(){if(this.isType())return this.parseTyped();return this.parseStmt();}
+  parseTyped(){const tt=this.advance(),l=tt.line;const nm=this.consume(TokenType.IDENTIFIER,`Expected identifier after '${tt.value}'`).value;
+    if(this.check(TokenType.LPAREN)){this.advance();const ps=[];if(!this.check(TokenType.RPAREN)){do{const pt=this.advance();const pn=this.consume(TokenType.IDENTIFIER,'Expected param name').value;ps.push({type:pt.value,name:pn});}while(this.match(TokenType.COMMA));}this.consume(TokenType.RPAREN,"Expected ')'");const bd=this.parseBlock();return new FuncDeclNode(tt.value,nm,ps,bd,l);}
+    let init=null;if(this.match(TokenType.ASSIGN))init=this.parseExpr();this.consume(TokenType.SEMICOLON,"Expected ';'");return new VarDeclNode(tt.value,nm,init,l);}
+  parseBlock(){const l=this.peek().line;this.consume(TokenType.LBRACE,"Expected '{'");const s=[];while(!this.check(TokenType.RBRACE)&&!this.isEnd())s.push(this.parseDecl());this.consume(TokenType.RBRACE,"Expected '}'");return new BlockNode(s,l);}
+  parseStmt(){const t=this.peek();if(this.match(TokenType.IF))return this.parseIf(t.line);if(this.match(TokenType.WHILE))return this.parseWhile(t.line);if(this.match(TokenType.FOR))return this.parseFor(t.line);if(this.match(TokenType.RETURN))return this.parseReturn(t.line);if(this.match(TokenType.BREAK)){this.consume(TokenType.SEMICOLON,"Expected ';'");return new BreakNode(t.line);}if(this.match(TokenType.CONTINUE)){this.consume(TokenType.SEMICOLON,"Expected ';'");return new ContinueNode(t.line);}if(this.match(TokenType.PRINT))return this.parsePrint(t.line);if(this.check(TokenType.LBRACE))return this.parseBlock();return this.parseExprStmt();}
+  parseIf(l){this.consume(TokenType.LPAREN,"Expected '('");const c=this.parseExpr();this.consume(TokenType.RPAREN,"Expected ')'");const th=this.parseStmt();let el=null;if(this.match(TokenType.ELSE))el=this.parseStmt();return new IfNode(c,th,el,l);}
+  parseWhile(l){this.consume(TokenType.LPAREN,"Expected '('");const c=this.parseExpr();this.consume(TokenType.RPAREN,"Expected ')'");const b=this.parseStmt();return new WhileNode(c,b,l);}
+  parseFor(l){this.consume(TokenType.LPAREN,"Expected '('");let init=null;if(!this.check(TokenType.SEMICOLON)){if(this.isType())init=this.parseTyped();else init=this.parseExprStmt();}else this.advance();let cond=null;if(!this.check(TokenType.SEMICOLON))cond=this.parseExpr();this.consume(TokenType.SEMICOLON,"Expected ';'");let inc=null;if(!this.check(TokenType.RPAREN))inc=this.parseExpr();this.consume(TokenType.RPAREN,"Expected ')'");const b=this.parseStmt();return new ForNode(init,cond,inc,b,l);}
+  parseReturn(l){let v=null;if(!this.check(TokenType.SEMICOLON))v=this.parseExpr();this.consume(TokenType.SEMICOLON,"Expected ';'");return new ReturnNode(v,l);}
+  parsePrint(l){this.consume(TokenType.LPAREN,"Expected '('");const a=[];if(!this.check(TokenType.RPAREN)){do{a.push(this.parseExpr());}while(this.match(TokenType.COMMA));}this.consume(TokenType.RPAREN,"Expected ')'");this.consume(TokenType.SEMICOLON,"Expected ';'");return new PrintNode(a,l);}
+  parseExprStmt(){const l=this.peek().line;const e=this.parseExpr();this.consume(TokenType.SEMICOLON,"Expected ';'");return new ExprStmtNode(e,l);}
+  parseExpr(){return this.parseAssign();}
+  parseAssign(){let e=this.parseOr();if(this.match(TokenType.ASSIGN)){const l=this.prev().line;if(e.type!=='Var')throw new ParseError('Invalid assignment target',this.prev());const v=this.parseAssign();return new AssignNode(e.name,v,l);}return e;}
+  parseOr(){let l=this.parseAnd();while(this.match(TokenType.OR)){const ln=this.prev().line;l=new BinOpNode('||',l,this.parseAnd(),ln);}return l;}
+  parseAnd(){let l=this.parseEq();while(this.match(TokenType.AND)){const ln=this.prev().line;l=new BinOpNode('&&',l,this.parseEq(),ln);}return l;}
+  parseEq(){let l=this.parseRel();while(this.match(TokenType.EQ,TokenType.NEQ)){const op=this.prev().value,ln=this.prev().line;l=new BinOpNode(op,l,this.parseRel(),ln);}return l;}
+  parseRel(){let l=this.parseAdd();while(this.match(TokenType.LT,TokenType.GT,TokenType.LTE,TokenType.GTE)){const op=this.prev().value,ln=this.prev().line;l=new BinOpNode(op,l,this.parseAdd(),ln);}return l;}
+  parseAdd(){let l=this.parseMul();while(this.match(TokenType.PLUS,TokenType.MINUS)){const op=this.prev().value,ln=this.prev().line;l=new BinOpNode(op,l,this.parseMul(),ln);}return l;}
+  parseMul(){let l=this.parseUnary();while(this.match(TokenType.STAR,TokenType.SLASH,TokenType.PERCENT)){const op=this.prev().value,ln=this.prev().line;l=new BinOpNode(op,l,this.parseUnary(),ln);}return l;}
+  parseUnary(){if(this.match(TokenType.NOT,TokenType.MINUS)){const op=this.prev().value,ln=this.prev().line;return new UnaryNode(op,this.parseUnary(),ln);}return this.parsePrimary();}
+  parsePrimary(){const t=this.peek(),l=t.line;if(this.match(TokenType.INT_LITERAL))return new IntLitNode(this.prev().value,l);if(this.match(TokenType.TRUE))return new BoolLitNode(true,l);if(this.match(TokenType.FALSE))return new BoolLitNode(false,l);if(this.match(TokenType.STRING_LITERAL))return new StringLitNode(this.prev().value,l);if(this.match(TokenType.IDENTIFIER)){const n=this.prev().value;if(this.match(TokenType.LPAREN)){const a=[];if(!this.check(TokenType.RPAREN))do{a.push(this.parseExpr());}while(this.match(TokenType.COMMA));this.consume(TokenType.RPAREN,"Expected ')'");return new CallNode(n,a,l);}return new VarNode(n,l);}if(this.match(TokenType.LPAREN)){const e=this.parseExpr();this.consume(TokenType.RPAREN,"Expected ')'");return e;}throw new ParseError(`Unexpected token '${t.value??t.type}'`,t);}
+}
+
+// ── Semantic Analyzer ──
+class SemanticError extends Error{constructor(m,l){super(m);this.line=l;this.phase='Semantic';}}
+class SymbolTable{constructor(p=null){this.parent=p;this.table={};}define(n,i){this.table[n]=i;}lookup(n){return this.table[n]||(this.parent?this.parent.lookup(n):null);}has(n){return n in this.table;}}
+class SemanticAnalyzer{
+  constructor(){this.scope=new SymbolTable();this.currentFunc=null;this.loopDepth=0;this.errors=[];}
+  err(m,l){this.errors.push(new SemanticError(m,l));}push(){this.scope=new SymbolTable(this.scope);}pop(){this.scope=this.scope.parent;}
+  analyze(n){if(!n)return'void';switch(n.type){
+    case'Program':n.declarations.forEach(d=>this.analyze(d));break;
+    case'VarDecl':{if(this.scope.has(n.name))this.err(`Variable '${n.name}' already declared in this scope`,n.line);if(n.init){const it=this.analyze(n.init);if(it!==n.varType&&!(n.varType==='int'&&it==='bool')&&it!=='unknown')this.err(`Cannot assign '${it}' to '${n.varType}'`,n.line);}this.scope.define(n.name,{varType:n.varType,kind:'var'});return n.varType;}
+    case'FuncDecl':{if(this.scope.has(n.name))this.err(`Function '${n.name}' already declared`,n.line);this.scope.define(n.name,{varType:n.retType,kind:'func',params:n.params});const pf=this.currentFunc;this.currentFunc={retType:n.retType,name:n.name};this.push();n.params.forEach(p=>this.scope.define(p.name,{varType:p.type,kind:'param'}));this.analyze(n.body);this.pop();this.currentFunc=pf;break;}
+    case'Block':this.push();n.statements.forEach(s=>this.analyze(s));this.pop();break;
+    case'If':{const ct=this.analyze(n.condition);if(ct!=='bool'&&ct!=='int')this.err('Condition must be bool/int',n.line);this.analyze(n.thenBranch);if(n.elseBranch)this.analyze(n.elseBranch);break;}
+    case'While':{this.analyze(n.condition);this.loopDepth++;this.analyze(n.body);this.loopDepth--;break;}
+    case'For':{this.push();if(n.init)this.analyze(n.init);if(n.condition)this.analyze(n.condition);if(n.increment)this.analyze(n.increment);this.loopDepth++;this.analyze(n.body);this.loopDepth--;this.pop();break;}
+    case'Return':{if(!this.currentFunc)this.err('Return outside function',n.line);const vt=n.value?this.analyze(n.value):'void';if(this.currentFunc&&vt!==this.currentFunc.retType&&!(this.currentFunc.retType==='int'&&vt==='bool'))this.err(`Return type mismatch: expected '${this.currentFunc.retType}', got '${vt}'`,n.line);break;}
+    case'Break':if(this.loopDepth===0)this.err("'break' outside loop",n.line);break;
+    case'Continue':if(this.loopDepth===0)this.err("'continue' outside loop",n.line);break;
+    case'Print':n.args.forEach(a=>this.analyze(a));break;
+    case'ExprStmt':return this.analyze(n.expression);
+    case'Assign':{const s=this.scope.lookup(n.name);if(!s)this.err(`Undeclared variable '${n.name}'`,n.line);const vt=this.analyze(n.value);if(s&&vt!==s.varType&&!(s.varType==='int'&&vt==='bool')&&vt!=='unknown')this.err(`Cannot assign '${vt}' to '${n.name}'`,n.line);return s?.varType||'int';}
+    case'BinOp':{const lt=this.analyze(n.left),rt=this.analyze(n.right);const arith=['+','-','*','/','%'];const cmp=['<','>','<=','>='];const eq=['==','!='];if(arith.includes(n.op)){if(lt!=='int'||rt!=='int')this.err(`Arithmetic '${n.op}' requires int`,n.line);return'int';}if(cmp.includes(n.op)){if(lt!=='int'||rt!=='int')this.err(`Comparison '${n.op}' requires int`,n.line);return'bool';}if(eq.includes(n.op)){if(lt!==rt)this.err(`Type mismatch in '${n.op}': '${lt}' vs '${rt}'`,n.line);return'bool';}return'bool';}
+    case'Unary':{const t=this.analyze(n.expr);if(n.op==='-'&&t!=='int')this.err("Unary '-' requires int",n.line);return n.op==='-'?'int':'bool';}
+    case'Call':{const s=this.scope.lookup(n.name);if(!s)this.err(`Undeclared function '${n.name}'`,n.line);if(s&&s.kind!=='func')this.err(`'${n.name}' is not a function`,n.line);if(s?.params&&n.args.length!==s.params.length)this.err(`'${n.name}' expects ${s.params.length} args, got ${n.args.length}`,n.line);n.args.forEach(a=>this.analyze(a));return s?.varType||'unknown';}
+    case'Var':{const s=this.scope.lookup(n.name);if(!s)this.err(`Undeclared variable '${n.name}'`,n.line);return s?.varType||'int';}
+    case'IntLit':return'int';case'BoolLit':return'bool';case'StringLit':return'string';
+  }return'void';}
+}
+
+// ── IR Generator ──
+class IRGen{
+  constructor(){this.instructions=[];this.tc=0;this.lc=0;}
+  tmp(){return`t${++this.tc}`;}label(p='L'){return`${p}${++this.lc}`;}emit(op,a1=null,a2=null,r=null){const i={op,arg1:a1,arg2:a2,result:r};this.instructions.push(i);return i;}
+  gen(n){if(!n)return null;switch(n.type){
+    case'Program':n.declarations.forEach(d=>this.gen(d));break;
+    case'VarDecl':{if(n.init){const v=this.gen(n.init);this.emit('ASSIGN',v,null,n.name);}else this.emit('DECLARE',n.varType,null,n.name);break;}
+    case'FuncDecl':{this.emit('FUNC_BEGIN',n.name);n.params.forEach(p=>this.emit('PARAM',p.type,null,p.name));this.gen(n.body);this.emit('FUNC_END',n.name);break;}
+    case'Block':n.statements.forEach(s=>this.gen(s));break;
+    case'If':{const cv=this.gen(n.condition),el=this.label('else'),en=this.label('endif');this.emit('IF_FALSE',cv,null,el);this.gen(n.thenBranch);this.emit('GOTO',null,null,en);this.emit('LABEL',el);if(n.elseBranch)this.gen(n.elseBranch);this.emit('LABEL',en);break;}
+    case'While':{const sl=this.label('while'),el=this.label('endwhile');this.emit('LABEL',sl);const cv=this.gen(n.condition);this.emit('IF_FALSE',cv,null,el);this.gen(n.body);this.emit('GOTO',null,null,sl);this.emit('LABEL',el);break;}
+    case'For':{const sl=this.label('for'),el=this.label('endfor');if(n.init)this.gen(n.init);this.emit('LABEL',sl);if(n.condition){const cv=this.gen(n.condition);this.emit('IF_FALSE',cv,null,el);}this.gen(n.body);if(n.increment)this.gen(n.increment);this.emit('GOTO',null,null,sl);this.emit('LABEL',el);break;}
+    case'Return':{const v=n.value?this.gen(n.value):null;this.emit('RETURN',v);break;}
+    case'Break':this.emit('BREAK');break;case'Continue':this.emit('CONTINUE');break;
+    case'Print':{const vs=n.args.map(a=>this.gen(a));this.emit('PRINT',vs.join('|||'));break;}
+    case'ExprStmt':return this.gen(n.expression);
+    case'Assign':{const v=this.gen(n.value);this.emit('ASSIGN',v,null,n.name);return n.name;}
+    case'BinOp':{const l=this.gen(n.left),r=this.gen(n.right),t=this.tmp();const op={'+':'ADD','-':'SUB','*':'MUL','/':'DIV','%':'MOD','==':'EQ','!=':'NEQ','<':'LT','>':'GT','<=':'LTE','>=':'GTE','&&':'AND','||':'OR'}[n.op]||n.op;this.emit(op,l,r,t);return t;}
+    case'Unary':{const e=this.gen(n.expr),t=this.tmp();this.emit(n.op==='-'?'NEG':'NOT',e,null,t);return t;}
+    case'Call':{const args=n.args.map(a=>this.gen(a));args.forEach(a=>this.emit('ARG',a));const t=this.tmp();this.emit('CALL',n.name,args.length,t);return t;}
+    case'Var':return n.name;case'IntLit':return String(n.value);case'BoolLit':return n.value?'1':'0';case'StringLit':return JSON.stringify(n.value);
+  }return null;}
+  format(){return this.instructions.map((ins,i)=>{const{op,arg1,arg2,result}=ins;let s='';switch(op){case'FUNC_BEGIN':s=`\nFUNC ${arg1}:`;break;case'FUNC_END':s=`END FUNC ${arg1}\n`;break;case'PARAM':s=`  PARAM ${arg1} ${result}`;break;case'LABEL':s=`${arg1}:`;break;case'GOTO':s=`  GOTO ${result}`;break;case'IF_FALSE':s=`  IF_FALSE ${arg1} GOTO ${result}`;break;case'ASSIGN':s=`  ${result} = ${arg1}`;break;case'DECLARE':s=`  DECLARE ${arg1} ${result}`;break;case'RETURN':s=`  RETURN${arg1?' '+arg1:''}`;break;case'PRINT':s=`  PRINT ${arg1}`;break;case'BREAK':s=`  BREAK`;break;case'CONTINUE':s=`  CONTINUE`;break;case'ARG':s=`  ARG ${arg1}`;break;case'CALL':s=`  ${result} = CALL ${arg1} ${arg2}`;break;case'NEG':s=`  ${result} = NEG ${arg1}`;break;case'NOT':s=`  ${result} = NOT ${arg1}`;break;default:s=`  ${result} = ${arg1} ${op} ${arg2}`;}return`${String(i).padStart(3,'0')}: ${s}`;}).join('\n');}
+}
+
+// ── Virtual Machine ──
+class VM{
+  constructor(instrs,out){this.instrs=instrs;this.out=out||((s)=>console.log(s));this.lmap={};this.fmap={};this.steps=0;this.maxSteps=500000;this._args=[];this.buildMaps();}
+  buildMaps(){this.instrs.forEach((ins,i)=>{if(ins.op==='LABEL')this.lmap[ins.arg1]=i;if(ins.op==='FUNC_BEGIN')this.fmap[ins.arg1]=i;});}
+  res(v,env){if(v===null||v===undefined)return null;if(typeof v==='string'&&v.startsWith('"'))return v.slice(1,-1).replace(/\\n/g,'\n').replace(/\\t/g,'\t');const n=Number(v);if(!isNaN(n))return n;if(env&&v in env)return env[v];return null;}
+
+  execFunc(name,callerEnv,args,resultDest,returnPC){
+    const fp=this.fmap[name];if(fp===undefined)throw new Error(`Undefined function '${name}'`);
+    const env={};let pi=fp+1;
+    while(pi<this.instrs.length&&this.instrs[pi].op==='PARAM'){env[this.instrs[pi].result]=args.shift()??0;pi++;}
+    let pc=pi;
+    while(pc<this.instrs.length&&++this.steps<this.maxSteps){
+      const ins=this.instrs[pc];
+      if(ins.op==='FUNC_END'||ins.op==='FUNC_BEGIN')break;
+      if(ins.op==='RETURN'){const rv=ins.arg1?this.res(ins.arg1,env):null;if(resultDest)callerEnv[resultDest]=rv;return returnPC;}
+      const npc=this.execInstr(pc,env);if(npc===null)break;pc=npc;
+    }
+    if(resultDest)callerEnv[resultDest]=null;return returnPC;
+  }
+
+  execInstr(pc,env){
+    if(++this.steps>this.maxSteps)throw new Error('Execution limit exceeded (possible infinite loop)');
+    const ins=this.instrs[pc];const{op,arg1,arg2,result}=ins;
+    const R=(v)=>this.res(v,env);
+    switch(op){
+      case'DECLARE':env[result]=0;return pc+1;
+      case'ASSIGN':env[result]=R(arg1);return pc+1;
+      case'LABEL':return pc+1;
+      case'GOTO':return(this.lmap[result]??pc)+1;
+      case'IF_FALSE':return R(arg1)?pc+1:(this.lmap[result]??pc)+1;
+      case'ADD':env[result]=R(arg1)+R(arg2);return pc+1;
+      case'SUB':env[result]=R(arg1)-R(arg2);return pc+1;
+      case'MUL':env[result]=R(arg1)*R(arg2);return pc+1;
+      case'DIV':{const d=R(arg2);if(d===0)throw new Error('Division by zero');env[result]=Math.trunc(R(arg1)/d);return pc+1;}
+      case'MOD':{const m=R(arg2);if(m===0)throw new Error('Modulo by zero');env[result]=R(arg1)%m;return pc+1;}
+      case'EQ':env[result]=R(arg1)===R(arg2)?1:0;return pc+1;
+      case'NEQ':env[result]=R(arg1)!==R(arg2)?1:0;return pc+1;
+      case'LT':env[result]=R(arg1)<R(arg2)?1:0;return pc+1;
+      case'GT':env[result]=R(arg1)>R(arg2)?1:0;return pc+1;
+      case'LTE':env[result]=R(arg1)<=R(arg2)?1:0;return pc+1;
+      case'GTE':env[result]=R(arg1)>=R(arg2)?1:0;return pc+1;
+      case'AND':env[result]=(R(arg1)&&R(arg2))?1:0;return pc+1;
+      case'OR':env[result]=(R(arg1)||R(arg2))?1:0;return pc+1;
+      case'NEG':env[result]=-R(arg1);return pc+1;
+      case'NOT':env[result]=R(arg1)?0:1;return pc+1;
+      case'ARG':this._args.push(R(arg1));return pc+1;
+      case'CALL':{const nm=arg1,ac=Number(arg2),args=this._args.splice(0,ac);const rv=this.execFunc(nm,env,args,result,pc+1);return rv;}
+      case'PRINT':{const parts=arg1.split('|||').map(v=>v.trim());const vals=parts.map(v=>{const r=this.res(v,env);return r===null?'null':String(r);});this.out(vals.join(' ')+'\n');return pc+1;}
+      case'RETURN':return null;case'BREAK':return null;case'CONTINUE':return null;
+      case'FUNC_BEGIN':return null;case'FUNC_END':return null;
+      default:return pc+1;
+    }
+  }
+
+  run(){
+    const env={};let pc=0;
+    // Find main if exists, else run top level skipping func defs
+    if('main' in this.fmap){
+      this.execFunc('main',env,[],null,this.instrs.length);
+      return;
+    }
+    while(pc<this.instrs.length&&this.steps<this.maxSteps){
+      if(this.instrs[pc].op==='FUNC_BEGIN'){// skip to matching FUNC_END
+        let depth=1;pc++;while(pc<this.instrs.length&&depth>0){if(this.instrs[pc].op==='FUNC_BEGIN')depth++;if(this.instrs[pc].op==='FUNC_END')depth--;pc++;}continue;}
+      const npc=this.execInstr(pc,env);if(npc===null)break;pc=npc;
+    }
+  }
+}
+
+// ── Assembly Generator ──
+class AsmGen{
+  constructor(ir){this.ir=ir;this.slots={};this.sc=0;}
+  slot(n){if(!(n in this.slots))this.slots[n]=(++this.sc)*8;return this.slots[n];}
+  oa(v){if(v===null||v===undefined)return'0';const n=Number(v);if(!isNaN(n))return String(n);return`[rbp-${this.slot(v)}]`;}
+  gen(){const lines=['; ═══════════════════════════════════════','; ABC Tech Compiler — x86-64 Assembly Output','; Generated for Hypothetical Virtual Machine','; ═══════════════════════════════════════','','section .data','  fmt_int db "%d",10,0','  fmt_str db "%s",10,0','','section .text','  global main','  extern printf',''];
+  for(const ins of this.ir){const{op,arg1,arg2,result}=ins;switch(op){
+    case'FUNC_BEGIN':lines.push(``,`${arg1}:`,`  push rbp`,`  mov rbp, rsp`,`  sub rsp, 256`);break;
+    case'FUNC_END':lines.push(`  mov rsp, rbp`,`  pop rbp`,`  ret`,``);break;
+    case'PARAM':lines.push(`  ; param ${result} (${arg1})`);break;
+    case'DECLARE':lines.push(`  ; declare ${result}`,`  mov qword [rbp-${this.slot(result)}], 0`);break;
+    case'ASSIGN':lines.push(`  mov rax, ${this.oa(arg1)}`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'ADD':lines.push(`  mov rax, ${this.oa(arg1)}`,`  mov rbx, ${this.oa(arg2)}`,`  add rax, rbx`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'SUB':lines.push(`  mov rax, ${this.oa(arg1)}`,`  mov rbx, ${this.oa(arg2)}`,`  sub rax, rbx`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'MUL':lines.push(`  mov rax, ${this.oa(arg1)}`,`  mov rbx, ${this.oa(arg2)}`,`  imul rax, rbx`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'DIV':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cqo`,`  mov rbx, ${this.oa(arg2)}`,`  idiv rbx`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'MOD':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cqo`,`  mov rbx, ${this.oa(arg2)}`,`  idiv rbx`,`  mov [rbp-${this.slot(result)}], rdx`);break;
+    case'EQ':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  sete al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'NEQ':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  setne al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'LT':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  setl al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'GT':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  setg al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'LTE':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  setle al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'GTE':lines.push(`  mov rax, ${this.oa(arg1)}`,`  cmp rax, ${this.oa(arg2)}`,`  setge al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'AND':lines.push(`  mov rax, ${this.oa(arg1)}`,`  and rax, ${this.oa(arg2)}`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'OR':lines.push(`  mov rax, ${this.oa(arg1)}`,`  or rax, ${this.oa(arg2)}`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'NEG':lines.push(`  mov rax, ${this.oa(arg1)}`,`  neg rax`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'NOT':lines.push(`  mov rax, ${this.oa(arg1)}`,`  test rax, rax`,`  setz al`,`  movzx rax, al`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'LABEL':lines.push(`${arg1}:`);break;
+    case'GOTO':lines.push(`  jmp ${result}`);break;
+    case'IF_FALSE':lines.push(`  mov rax, ${this.oa(arg1)}`,`  test rax, rax`,`  jz ${result}`);break;
+    case'RETURN':lines.push(arg1?`  mov rax, ${this.oa(arg1)}`:`  xor rax, rax`,`  leave`,`  ret`);break;
+    case'ARG':lines.push(`  push ${this.oa(arg1)}`);break;
+    case'CALL':lines.push(`  call ${arg1}`,`  mov [rbp-${this.slot(result)}], rax`);break;
+    case'PRINT':lines.push(`  ; printf("${arg1}")`);break;
+    default:lines.push(`  ; ${op} ${arg1??''} → ${result??''}`);}}
+  lines.push(``,'section .note.GNU-stack noalloc noexec nowrite progbits');return lines.join('\n');}
+}
+
+// ── Master Compile Function ──
+function compile(src,outCb){
+  const res={tokens:[],ast:null,ir:'',assembly:'',output:'',errors:[],phases:{},stats:{lines:0,tokens:0,instructions:0,errors:0},success:false};
+  const t0=performance.now();
+  try{const lx=new Lexer(src);res.tokens=lx.tokenize();res.stats.tokens=res.tokens.length;res.phases.lexer={time:(performance.now()-t0).toFixed(2),ok:true};}
+  catch(e){res.errors.push({phase:e.phase||'Lexer',message:e.message,line:e.line,col:e.col});res.phases.lexer={ok:false,time:'—'};return res;}
+  const t1=performance.now();
+  try{const p=new Parser(res.tokens);res.ast=p.parse();res.phases.parser={time:(performance.now()-t1).toFixed(2),ok:true};}
+  catch(e){res.errors.push({phase:e.phase||'Parser',message:e.message,line:e.line,col:e.col});res.phases.parser={ok:false,time:'—'};return res;}
+  const t2=performance.now();
+  const sem=new SemanticAnalyzer();sem.analyze(res.ast);
+  sem.errors.forEach(e=>res.errors.push({phase:'Semantic',message:e.message,line:e.line}));
+  res.phases.semantic={time:(performance.now()-t2).toFixed(2),ok:sem.errors.length===0};
+  const t3=performance.now();
+  try{const ig=new IRGen();ig.gen(res.ast);res.ir=ig.format();res.stats.instructions=ig.instructions.length;res.phases.irgen={time:(performance.now()-t3).toFixed(2),ok:true};
+    const ag=new AsmGen(ig.instructions);res.assembly=ag.gen();res.phases.asm={time:(performance.now()-t3).toFixed(2),ok:true};
+    if(res.errors.length===0){let prog='';const vm=new VM(ig.instructions,(s)=>{prog+=s;if(outCb)outCb(s);});vm.run();res.output=prog;res.phases.vm={time:(performance.now()-t3).toFixed(2),ok:true};}
+  }catch(e){res.errors.push({phase:e.phase||'Execution',message:e.message,line:e.line});res.phases.vm={ok:false,time:'—'};}
+  res.stats.lines=src.split('\n').length;res.stats.errors=res.errors.length;res.success=res.errors.length===0;res.totalTime=(performance.now()-t0).toFixed(2);
+  return res;
+}
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// IDE LOGIC
+// ═══════════════════════════════════════════════════════════
+const EXAMPLES = {
+  hello: `// Hello World — ABC Tech Compiler
+// Demonstrates: variables, strings, print statement
+
+int main() {
+  int x = 42;
+  int y = 8;
+  int sum = x + y;
+  
+  print("Hello, ABC Tech World!");
+  print("The answer is:", sum);
+  print("x =", x, "y =", y);
+  
+  // Test boolean expressions
+  bool flag = true;
+  if (flag) {
+    print("Flag is true!");
+  } else {
+    print("Flag is false!");
+  }
+  
+  return 0;
+}`,
+
+  fibonacci: `// Fibonacci Sequence — Iterative
+// Demonstrates: while loops, multiple variables, arithmetic
+
+int main() {
+  int n = 10;       // compute first n fibonacci numbers
+  int a = 0;
+  int b = 1;
+  int i = 0;
+  int temp = 0;
+
+  print("Fibonacci sequence:");
+  
+  while (i < n) {
+    print(a);
+    temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+  }
+  
+  print("Done! First", n, "Fibonacci numbers printed.");
+  return 0;
+}`,
+
+  factorial: `// Factorial — Recursive Function
+// Demonstrates: function declarations, recursion, return values
+
+int factorial(int n) {
+  if (n <= 1) {
+    return 1;
+  }
+  return n * factorial(n - 1);
+}
+
+int power(int base, int exp) {
+  int result = 1;
+  int i = 0;
+  while (i < exp) {
+    result = result * base;
+    i = i + 1;
+  }
+  return result;
+}
+
+int main() {
+  print("=== Factorial Calculator ===");
+  
+  int i = 1;
+  while (i <= 8) {
+    int f = factorial(i);
+    print(i, "! =", f);
+    i = i + 1;
+  }
+  
+  print("");
+  print("=== Powers of 2 ===");
+  int j = 0;
+  while (j <= 10) {
+    int p = power(2, j);
+    print("2 ^", j, "=", p);
+    j = j + 1;
+  }
+  
+  return 0;
+}`,
+
+  bubblesort: `// Bubble Sort Simulation
+// Demonstrates: for loops, nested loops, comparisons
+// (Arrays not supported; simulates with individual variables)
+
+int max(int a, int b) {
+  if (a > b) { return a; }
+  return b;
+}
+
+int min(int a, int b) {
+  if (a < b) { return a; }
+  return b;
+}
+
+int gcd(int a, int b) {
+  while (b != 0) {
+    int temp = b;
+    b = a % b;
+    a = temp;
+  }
+  return a;
+}
+
+int isPrime(int n) {
+  if (n < 2) { return 0; }
+  if (n == 2) { return 1; }
+  int i = 2;
+  while (i * i <= n) {
+    if (n % i == 0) { return 0; }
+    i = i + 1;
+  }
+  return 1;
+}
+
+int main() {
+  print("=== Sorting Demo (5 values) ===");
+  int a = 64;
+  int b = 34;
+  int c = 25;
+  int d = 12;
+  int e = 22;
+  
+  print("Before:", a, b, c, d, e);
+  
+  // Bubble sort 5 values (manual unroll)
+  int tmp = 0;
+  
+  // Pass 1
+  if (a > b) { tmp = a; a = b; b = tmp; }
+  if (b > c) { tmp = b; b = c; c = tmp; }
+  if (c > d) { tmp = c; c = d; d = tmp; }
+  if (d > e) { tmp = d; d = e; e = tmp; }
+  
+  // Pass 2
+  if (a > b) { tmp = a; a = b; b = tmp; }
+  if (b > c) { tmp = b; b = c; c = tmp; }
+  if (c > d) { tmp = c; c = d; d = tmp; }
+  
+  // Pass 3
+  if (a > b) { tmp = a; a = b; b = tmp; }
+  if (b > c) { tmp = b; b = c; c = tmp; }
+  
+  // Pass 4
+  if (a > b) { tmp = a; a = b; b = tmp; }
+  
+  print("After: ", a, b, c, d, e);
+  
+  print("");
+  print("=== Math Utilities ===");
+  print("max(17, 42) =", max(17, 42));
+  print("min(17, 42) =", min(17, 42));
+  print("gcd(48, 18) =", gcd(48, 18));
+  
+  return 0;
+}`,
+
+  primes: `// Prime Number Sieve (up to 50)
+// Demonstrates: for loops, nested loops, break/continue
+
+int isPrime(int n) {
+  if (n < 2) { return 0; }
+  if (n == 2) { return 1; }
+  if (n % 2 == 0) { return 0; }
+  int i = 3;
+  while (i * i <= n) {
+    if (n % i == 0) { return 0; }
+    i = i + 2;
+  }
+  return 1;
+}
+
+int sumDigits(int n) {
+  int s = 0;
+  while (n > 0) {
+    s = s + (n % 10);
+    n = n / 10;
+  }
+  return s;
+}
+
+int main() {
+  print("=== Prime Numbers up to 50 ===");
+  
+  int count = 0;
+  int i = 2;
+  
+  while (i <= 50) {
+    if (isPrime(i)) {
+      print("Prime:", i, "(digit sum:", sumDigits(i), ")");
+      count = count + 1;
+    }
+    i = i + 1;
+  }
+  
+  print("Total primes found:", count);
+  
+  print("");
+  print("=== For Loop Demo ===");
+  
+  for (int j = 1; j <= 5; j = j + 1) {
+    int sq = j * j;
+    int cu = j * j * j;
+    print(j, "squared =", sq, "  cubed =", cu);
+  }
+  
+  return 0;
+}`,
+
+  scope: `// Scope & Functions Demo
+// Demonstrates: variable scoping, multiple functions, 
+// nested blocks, boolean logic
+
+bool isEven(int n) {
+  return n % 2 == 0;
+}
+
+bool isPositive(int n) {
+  return n > 0;
+}
+
+int absolute(int n) {
+  if (n < 0) {
+    return -n;
+  }
+  return n;
+}
+
+int clamp(int val, int lo, int hi) {
+  if (val < lo) { return lo; }
+  if (val > hi) { return hi; }
+  return val;
+}
+
+int collatz(int n) {
+  int steps = 0;
+  while (n != 1) {
+    if (isEven(n)) {
+      n = n / 2;
+    } else {
+      n = n * 3 + 1;
+    }
+    steps = steps + 1;
+  }
+  return steps;
+}
+
+int main() {
+  print("=== Scope Demo ===");
+  int x = 10;
+  
+  {
+    int x = 20;   // inner scope shadows outer
+    print("Inner x:", x);
+    {
+      int x = 30;
+      print("Innermost x:", x);
+    }
+    print("Back to inner x:", x);
+  }
+  
+  print("Outer x:", x);
+  
+  print("");
+  print("=== Function Demo ===");
+  
+  int val = -7;
+  print("absolute(", val, ") =", absolute(val));
+  print("clamp(15, 0, 10) =", clamp(15, 0, 10));
+  print("clamp(-5, 0, 10) =", clamp(-5, 0, 10));
+  
+  print("");
+  print("=== Collatz Conjecture ===");
+  int start = 6;
+  while (start <= 15) {
+    int steps = collatz(start);
+    print("collatz(", start, ") =", steps, "steps");
+    start = start + 1;
+  }
+  
+  return 0;
+}`,
+
+  errors: `// Error Demonstration
+// This code intentionally has semantic errors
+// Try fixing them to see compilation succeed!
+
+int add(int a, int b) {
+  return a + b;
+}
+
+int main() {
+  // ERROR 1: Type mismatch — assigning bool to int
+  // bool flag = 42;
+  
+  // ERROR 2: Undeclared variable
+  // print(undeclared_var);
+  
+  // ERROR 3: Wrong argument count
+  // int r = add(1, 2, 3);
+  
+  // ERROR 4: Break outside loop
+  // break;
+  
+  // This part is correct:
+  int x = 5;
+  int y = 10;
+  int result = add(x, y);
+  print("5 + 10 =", result);
+  
+  // Uncomment lines above one at a time to see error messages!
+  return 0;
+}`
+};
+
+let lastResult = null;
+let activeTab = 'output';
+
+const editor = document.getElementById('codeEditor');
+const lineNums = document.getElementById('lineNumbers');
+
+// ── Editor setup ──
+editor.addEventListener('input', updateLineNumbers);
+editor.addEventListener('scroll', () => { lineNums.scrollTop = editor.scrollTop; });
+editor.addEventListener('keydown', handleEditorKey);
+editor.addEventListener('click', updateCursor);
+editor.addEventListener('keyup', updateCursor);
+
+function handleEditorKey(e){
+  if(e.key==='Tab'){e.preventDefault();const s=editor.selectionStart,en=editor.selectionEnd;editor.value=editor.value.substring(0,s)+'  '+editor.value.substring(en);editor.selectionStart=editor.selectionEnd=s+2;updateLineNumbers();}
+  if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();runCompiler();}
+}
+
+function updateCursor(){
+  const v=editor.value,pos=editor.selectionStart;const ln=v.substring(0,pos).split('\n').length;const col=pos-v.lastIndexOf('\n',pos-1);document.getElementById('cursorPos').textContent=`Ln ${ln}, Col ${col}`;
+}
+
+function updateLineNumbers(){
+  const lines=editor.value.split('\n').length;let html='';for(let i=1;i<=lines;i++)html+=`<div class="line-num">${i}</div>`;lineNums.innerHTML=html;lineNums.style.height=editor.scrollHeight+'px';
+}
+
+function loadExample(name){
+  editor.value=EXAMPLES[name]||'';updateLineNumbers();
+  document.querySelectorAll('.example-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('ex-'+name)?.classList.add('active');
+  updateCursor();
+}
+
+function clearEditor(){ editor.value='';updateLineNumbers();resetPhases();document.getElementById('outputContent').innerHTML='<div class="run-hint">▶ Editor cleared. Write code or load an example.</div>';}
+
+function formatCode(){
+  // Basic formatting: normalize indentation
+  const lines=editor.value.split('\n');let depth=0;
+  const formatted=lines.map(l=>{const tr=l.trim();if(!tr)return'';if(tr.startsWith('}'))depth=Math.max(0,depth-1);const ind='  '.repeat(depth);if(tr.endsWith('{'))depth++;return ind+tr;});
+  editor.value=formatted.join('\n');updateLineNumbers();
+}
+
+// ── Phase UI updates ──
+function resetPhases(){
+  ['lexer','parser','semantic','irgen','asm','vm'].forEach(p=>{
+    const ph=document.getElementById('ph-'+p),pd=document.getElementById('pd-'+p),pt=document.getElementById('pt-'+p);
+    ph.className='phase-item idle';pd.className='phase-dot idle';pt.textContent='—';
+  });
+}
+
+function updatePhases(phases){
+  const map={lexer:'lexer',parser:'parser',semantic:'semantic',irgen:'irgen',asm:'asm',vm:'vm'};
+  for(const[k,v] of Object.entries(phases)){
+    const ph=document.getElementById('ph-'+k),pd=document.getElementById('pd-'+k),pt=document.getElementById('pt-'+k);
+    if(!ph)continue;
+    const cls=v.ok?'ok':'error';
+    ph.className=`phase-item ${cls}`;pd.className=`phase-dot ${cls}`;
+    pt.textContent=v.time?`${v.time}ms`:'—';
+  }
+}
+
+// ── Tab system ──
+function showTab(name){
+  activeTab=name;
+  document.querySelectorAll('.output-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(lastResult) renderTab(name,lastResult);
+}
+
+function renderTab(name,result){
+  const el=document.getElementById('outputContent');
+  if(name==='output') el.innerHTML=renderOutput(result);
+  else if(name==='errors') el.innerHTML=renderErrors(result);
+  else if(name==='tokens') el.innerHTML=renderTokens(result);
+  else if(name==='ast') el.innerHTML=renderAST(result);
+  else if(name==='ir') el.innerHTML=renderIR(result);
+  else if(name==='asm') el.innerHTML=renderAsm(result);
+}
+
+function renderOutput(r){
+  if(!r.output&&r.errors.length===0) return'<div class="output-empty">Program produced no output.</div>';
+  let html='';
+  if(r.output){const lines=r.output.split('\n').filter((_,i,a)=>i<a.length-1||_);lines.forEach(l=>{html+=`<div class="output-line"><span class="output-prompt">▶</span><span class="output-text">${escHtml(l)}</span></div>`;});}
+  if(r.errors.length>0){html+=renderErrors(r);}
+  if(r.success) html+=`<div style="margin-top:12px;padding:8px 12px;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:6px;font-size:11px;color:var(--accent)">✓ Compilation successful — ${r.totalTime}ms total</div>`;
+  return html||'<div class="output-empty">No output</div>';
+}
+
+function renderErrors(r){
+  if(r.errors.length===0) return'<div class="output-empty" style="color:var(--accent)">✓ No errors found!</div>';
+  return r.errors.map(e=>`<div class="error-item"><div class="error-header"><span class="error-badge">ERROR</span><span class="error-phase">${e.phase}</span></div><div class="error-msg">${escHtml(e.message)}</div>${e.line?`<div class="error-loc">📍 Line ${e.line}${e.col?', Col '+e.col:''}</div>`:''}</div>`).join('');
+}
+
+function renderTokens(r){
+  if(!r.tokens||!r.tokens.length) return'<div class="output-empty">Run compiler to see tokens</div>';
+  const tkClass=(t)=>{if([TokenType.INT,TokenType.BOOL,TokenType.VOID,TokenType.IF,TokenType.ELSE,TokenType.WHILE,TokenType.FOR,TokenType.RETURN,TokenType.BREAK,TokenType.CONTINUE,TokenType.PRINT,TokenType.TRUE,TokenType.FALSE].includes(t))return'tk-kw';if(t===TokenType.INT_LITERAL||t===TokenType.BOOL_LITERAL)return'tk-lit';if(t===TokenType.STRING_LITERAL)return'tk-lit';if(t===TokenType.IDENTIFIER)return'tk-id';if([TokenType.LPAREN,TokenType.RPAREN,TokenType.LBRACE,TokenType.RBRACE,TokenType.SEMICOLON,TokenType.COMMA].includes(t))return'tk-delim';return'tk-op';};
+  let html='<div class="token-grid">';
+  r.tokens.filter(t=>t.type!==TokenType.EOF).forEach((t,i)=>{html+=`<span class="token-idx token-row">#${i}</span><span class="token-type ${tkClass(t.type)} token-row">${t.type}</span><span class="token-val token-row">${escHtml(String(t.value??''))}</span><span class="token-loc token-row">L${t.line}:C${t.col}</span>`;});
+  html+='</div>';return html;
+}
+
+function renderAST(r){
+  if(!r.ast) return'<div class="output-empty">Run compiler to see AST</div>';
+  function nodeHtml(node,depth=0){
+    if(!node||typeof node!=='object')return'';
+    const type=node.type||'?';
+    const colorClass=`ast-color-${type}`;
+    let props='';
+    if(node.name)props+=` <span class="ast-prop">name="${node.name}"</span>`;
+    if(node.varType)props+=` <span class="ast-prop">type="${node.varType}"</span>`;
+    if(node.retType)props+=` <span class="ast-prop">ret="${node.retType}"</span>`;
+    if(node.op)props+=` <span class="ast-prop">op="${node.op}"</span>`;
+    if(node.value!==undefined&&node.type!=='Block')props+=` <span class="ast-prop">val=${JSON.stringify(node.value)}</span>`;
+    let children='';
+    const childKeys=['declarations','statements','params','args','body','thenBranch','elseBranch','condition','left','right','expr','value','init','increment'];
+    childKeys.forEach(k=>{if(node[k]){if(Array.isArray(node[k]))node[k].forEach(c=>{children+=nodeHtml(c,depth+1);});else children+=nodeHtml(node[k],depth+1);}});
+    return`<div class="ast-node"><div class="ast-node-header"><span class="ast-node-type ${colorClass}">◆ ${type}</span>${props}<span class="ast-prop" style="margin-left:auto">L${node.line||'?'}</span></div>${children}</div>`;
+  }
+  return`<div style="font-size:12px">${nodeHtml(r.ast)}</div>`;
+}
+
+function renderIR(r){
+  if(!r.ir) return'<div class="output-empty">Run compiler to see IR</div>';
+  const lines=r.ir.split('\n');
+  const html=lines.map(line=>{
+    const m=line.match(/^(\d{3}): (.*)/);
+    if(!m) return`<div class="ir-line" style="color:var(--text3)">${escHtml(line)}</div>`;
+    const[,num,rest]=m;
+    let cls='ir-default',content=escHtml(rest);
+    if(rest.includes('FUNC'))cls='ir-func';
+    else if(rest.trim().endsWith(':')&&!rest.includes('='))cls='ir-label';
+    else if(rest.includes('GOTO')||rest.includes('IF_FALSE'))cls='ir-jump';
+    else if(rest.includes('='))cls='ir-assign';
+    else if(rest.includes('PRINT')||rest.includes('RETURN'))cls='ir-op';
+    return`<div class="ir-line"><span class="ir-num">${num}</span><span class="${cls}">${content}</span></div>`;
+  }).join('');
+  return`<div class="ir-view">${html}</div>`;
+}
+
+function renderAsm(r){
+  if(!r.assembly) return'<div class="output-empty">Run compiler to see assembly</div>';
+  const lines=r.assembly.split('\n');
+  const html=lines.map(line=>{
+    if(line.startsWith(';'))return`<span class="asm-comment">${escHtml(line)}</span>\n`;
+    if(line.startsWith('section'))return`<span class="asm-section">${escHtml(line)}</span>\n`;
+    if(line.match(/^[a-zA-Z_][a-zA-Z0-9_]*:$/))return`<span class="asm-label">${escHtml(line)}</span>\n`;
+    if(line.startsWith('  ')){let l=escHtml(line);l=l.replace(/(rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|al|bl)/g,'<span class="asm-reg">$1</span>');l=l.replace(/(;.*)/,'<span class="asm-comment">$1</span>');return`<span class="asm-instr">${l}</span>\n`;}
+    return`<span style="color:var(--text2)">${escHtml(line)}</span>\n`;
+  }).join('');
+  return`<div class="asm-view" style="white-space:pre">${html}</div>`;
+}
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── Run Compiler ──
+function runCompiler(){
+  const src=editor.value.trim();
+  if(!src){document.getElementById('outputContent').innerHTML='<div class="output-empty">Nothing to compile!</div>';return;}
+  
+  const runBtn=document.getElementById('runBtn');
+  runBtn.textContent='⟳ Compiling...';runBtn.disabled=true;
+  resetPhases();
+  
+  setTimeout(()=>{
+    try{
+      const result=compile(src);
+      lastResult=result;
+      
+      // Update phases
+      updatePhases(result.phases);
+      
+      // Update stats
+      document.getElementById('s-lines').textContent=result.stats.lines;
+      document.getElementById('s-tokens').textContent=result.stats.tokens;
+      document.getElementById('s-instrs').textContent=result.stats.instructions;
+      document.getElementById('s-errors').textContent=result.stats.errors;
+      
+      // Update error badge
+      const ec=document.getElementById('errCount');
+      if(result.errors.length>0){ec.style.display='inline';ec.textContent=result.errors.length;}
+      else ec.style.display='none';
+      
+      // Update status bar
+      const sb=document.getElementById('statusBar');
+      if(result.success){sb.innerHTML=`<div class="status-dot" style="background:var(--accent);box-shadow:0 0 6px var(--accent)"></div><span class="status-ok">✓ Compiled in ${result.totalTime}ms — ${result.stats.instructions} IR instructions generated</span>`;}
+      else{sb.innerHTML=`<div class="status-dot" style="background:var(--error)"></div><span class="status-error">✗ ${result.errors.length} error${result.errors.length>1?'s':''} — ${result.errors[0]?.phase}: ${result.errors[0]?.message}</span>`;}
+      
+      // Show appropriate tab
+      if(result.errors.length>0&&!result.output) showTab('errors');
+      else showTab(activeTab==='errors'&&result.success?'output':activeTab);
+      
+    }catch(e){
+      document.getElementById('outputContent').innerHTML=`<div class="error-item"><div class="error-header"><span class="error-badge">FATAL</span></div><div class="error-msg">Compiler crashed: ${escHtml(e.message)}</div></div>`;
+    }
+    runBtn.textContent='▶ Compile & Run';runBtn.disabled=false;
+  },10);
+}
+
+// ── Init ──
+loadExample('hello');
+editor.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')runCompiler();});
+</script>
+</body>
+</html>
