@@ -688,6 +688,194 @@ class IRGen {
   }
 }
 
+// Single pass lowering over AST: semantic checks and IR emission together.
+class SinglePassCompiler extends IRGen {
+  constructor(){
+    super();
+    this.scope=new SymbolTable();
+    this.currentFunc=null;
+    this.loopDepth=0;
+    this.errors=[];
+  }
+
+  error(msg,line){ this.errors.push(new SemanticError(msg,line)); }
+  pushScope(){ this.scope=new SymbolTable(this.scope); }
+  popScope(){ this.scope=this.scope.parent; }
+  canAssign(targetType,valueType){ return valueType===targetType||(targetType==='int'&&valueType==='bool')||valueType==='unknown'; }
+
+  lower(node){
+    if(!node) return;
+    switch(node.type){
+      case 'Program':
+        node.declarations.forEach(d=>this.lower(d));
+        break;
+      case 'VarDecl': {
+        if(this.scope.has(node.name)) this.error(`Variable '${node.name}' already declared in this scope`,node.line);
+        if(node.init){
+          const rhs=this.lowerExpr(node.init);
+          if(!this.canAssign(node.varType,rhs.type)) this.error(`Cannot assign '${rhs.type}' to variable of type '${node.varType}'`,node.line);
+          this.emit('ASSIGN',rhs.place,null,node.name);
+        } else {
+          this.emit('DECLARE',node.varType,null,node.name);
+        }
+        this.scope.define(node.name,{varType:node.varType,kind:'var'});
+        break;
+      }
+      case 'FuncDecl': {
+        if(this.scope.has(node.name)) this.error(`Function '${node.name}' already declared`,node.line);
+        this.scope.define(node.name,{varType:node.retType,kind:'func',params:node.params});
+        this.emit('FUNC_BEGIN',node.name,null,null);
+        const prev=this.currentFunc;
+        this.currentFunc={retType:node.retType,name:node.name};
+        this.pushScope();
+        node.params.forEach(p=>{ this.scope.define(p.name,{varType:p.type,kind:'param'}); this.emit('PARAM',p.type,null,p.name); });
+        this.lower(node.body);
+        this.popScope();
+        this.currentFunc=prev;
+        this.emit('FUNC_END',node.name,null,null);
+        break;
+      }
+      case 'Block':
+        this.pushScope();
+        node.statements.forEach(s=>this.lower(s));
+        this.popScope();
+        break;
+      case 'If': {
+        const cond=this.lowerExpr(node.condition);
+        if(cond.type!=='bool'&&cond.type!=='int') this.error('If condition must be bool or int',node.line);
+        const elseLabel=this.label('else'), endLabel=this.label('endif');
+        this.emit('IF_FALSE',cond.place,null,elseLabel);
+        this.lower(node.thenBranch);
+        this.emit('GOTO',null,null,endLabel);
+        this.emit('LABEL',elseLabel,null,null);
+        if(node.elseBranch) this.lower(node.elseBranch);
+        this.emit('LABEL',endLabel,null,null);
+        break;
+      }
+      case 'While': {
+        const startLabel=this.label('while'), endLabel=this.label('endwhile');
+        this.emit('LABEL',startLabel,null,null);
+        const cond=this.lowerExpr(node.condition);
+        if(cond.type!=='bool'&&cond.type!=='int') this.error('While condition must be bool or int',node.line);
+        this.emit('IF_FALSE',cond.place,null,endLabel);
+        this.loopDepth++;
+        this.lower(node.body);
+        this.loopDepth--;
+        this.emit('GOTO',null,null,startLabel);
+        this.emit('LABEL',endLabel,null,null);
+        break;
+      }
+      case 'For': {
+        this.pushScope();
+        const startLabel=this.label('for'), endLabel=this.label('endfor');
+        if(node.init) this.lower(node.init);
+        this.emit('LABEL',startLabel,null,null);
+        if(node.condition){
+          const cond=this.lowerExpr(node.condition);
+          if(cond.type!=='bool'&&cond.type!=='int') this.error('For condition must be bool or int',node.line);
+          this.emit('IF_FALSE',cond.place,null,endLabel);
+        }
+        this.loopDepth++;
+        this.lower(node.body);
+        this.loopDepth--;
+        if(node.increment) this.lowerExpr(node.increment);
+        this.emit('GOTO',null,null,startLabel);
+        this.emit('LABEL',endLabel,null,null);
+        this.popScope();
+        break;
+      }
+      case 'Return': {
+        if(!this.currentFunc) this.error('Return outside function',node.line);
+        const v=node.value?this.lowerExpr(node.value):{type:'void',place:null};
+        if(this.currentFunc&&!this.canAssign(this.currentFunc.retType,v.type))
+          this.error(`Return type mismatch: expected '${this.currentFunc.retType}', got '${v.type}'`,node.line);
+        this.emit('RETURN',v.place,null,null);
+        break;
+      }
+      case 'Break':
+        if(this.loopDepth===0) this.error("'break' outside loop",node.line);
+        this.emit('BREAK',null,null,null);
+        break;
+      case 'Continue':
+        if(this.loopDepth===0) this.error("'continue' outside loop",node.line);
+        this.emit('CONTINUE',null,null,null);
+        break;
+      case 'Print': {
+        const vals=node.args.map(a=>this.lowerExpr(a).place);
+        this.emit('PRINT',vals.join(','),null,null);
+        break;
+      }
+      case 'ExprStmt':
+        this.lowerExpr(node.expression);
+        break;
+    }
+  }
+
+  lowerExpr(node){
+    if(!node) return { type:'void', place:null };
+    switch(node.type){
+      case 'Assign': {
+        const sym=this.scope.lookup(node.name);
+        if(!sym) this.error(`Undeclared variable '${node.name}'`,node.line);
+        const rhs=this.lowerExpr(node.value);
+        if(sym&&!this.canAssign(sym.varType,rhs.type)) this.error(`Cannot assign '${rhs.type}' to '${node.name}' (type '${sym.varType}')`,node.line);
+        this.emit('ASSIGN',rhs.place,null,node.name);
+        return { type:sym?.varType||'int', place:node.name };
+      }
+      case 'BinOp': {
+        const l=this.lowerExpr(node.left), r=this.lowerExpr(node.right);
+        const arith=['+','-','*','/','%'];
+        const cmp=['<','>','<=','>='];
+        const eq=['==','!='];
+        let outType='bool';
+        if(arith.includes(node.op)){
+          if(l.type!=='int'||r.type!=='int') this.error(`Arithmetic op '${node.op}' requires int operands`,node.line);
+          outType='int';
+        } else if(cmp.includes(node.op)){
+          if(l.type!=='int'||r.type!=='int') this.error(`Comparison '${node.op}' requires int operands`,node.line);
+          outType='bool';
+        } else if(eq.includes(node.op)){
+          if(l.type!==r.type) this.error(`Equality '${node.op}' on mismatched types '${l.type}' and '${r.type}'`,node.line);
+          outType='bool';
+        }
+        const t=this.tmp();
+        this.emit(this.opCode(node.op),l.place,r.place,t);
+        return { type:outType, place:t };
+      }
+      case 'Unary': {
+        const v=this.lowerExpr(node.expr);
+        if(node.op==='-'&&v.type!=='int') this.error("Unary '-' requires int",node.line);
+        if(node.op==='!'&&v.type!=='bool'&&v.type!=='int') this.error("Unary '!' requires bool",node.line);
+        const t=this.tmp();
+        this.emit(node.op==='-'?'NEG':'NOT',v.place,null,t);
+        return { type:node.op==='-'?'int':'bool', place:t };
+      }
+      case 'Call': {
+        const sym=this.scope.lookup(node.name);
+        if(!sym) this.error(`Undeclared function '${node.name}'`,node.line);
+        if(sym&&sym.kind!=='func') this.error(`'${node.name}' is not a function`,node.line);
+        if(sym?.params&&node.args.length!==sym.params.length)
+          this.error(`Function '${node.name}' expects ${sym.params.length} args, got ${node.args.length}`,node.line);
+        const args=node.args.map(a=>this.lowerExpr(a));
+        args.forEach((a,i)=>{ if(sym?.params?.[i]&&!this.canAssign(sym.params[i].type,a.type)) this.error(`Arg ${i+1} type mismatch in call to '${node.name}'`,node.line); });
+        args.forEach(a=>this.emit('ARG',a.place,null,null));
+        const t=this.tmp();
+        this.emit('CALL',node.name,args.length,t);
+        return { type:sym?.varType||'unknown', place:t };
+      }
+      case 'Var': {
+        const sym=this.scope.lookup(node.name);
+        if(!sym) this.error(`Undeclared variable '${node.name}'`,node.line);
+        return { type:sym?.varType||'int', place:node.name };
+      }
+      case 'IntLit': return { type:'int', place:String(node.value) };
+      case 'BoolLit': return { type:'bool', place:node.value?'1':'0' };
+      case 'StringLit': return { type:'string', place:JSON.stringify(node.value) };
+    }
+    return { type:'unknown', place:null };
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // PHASE 5: VIRTUAL MACHINE (IR Interpreter)
 // ─────────────────────────────────────────────────────────────
@@ -926,32 +1114,28 @@ function compile(sourceCode, outputCallback){
   }
 
   const t2=performance.now();
+  let singlePass;
   try {
-    // Phase 3: Semantic Analysis
-    const sem=new SemanticAnalyzer();
-    sem.analyze(result.ast);
-    result.semanticErrors=sem.errors;
-    result.phases.semantic={time:(performance.now()-t2).toFixed(2),ok:sem.errors.length===0,warnings:sem.errors.length};
-    if(sem.errors.length>0){
-      sem.errors.forEach(e=>result.errors.push({phase:'Semantic',message:e.message,line:e.line}));
-    }
+    // Phase 3+4 combined: single-pass semantic analysis and IR generation.
+    singlePass=new SinglePassCompiler();
+    singlePass.lower(result.ast);
+    result.semanticErrors=singlePass.errors;
+    result.phases.semantic={time:(performance.now()-t2).toFixed(2),ok:singlePass.errors.length===0,warnings:singlePass.errors.length};
+    singlePass.errors.forEach(e=>result.errors.push({phase:'Semantic',message:e.message,line:e.line}));
+    result.ir=singlePass.formatIR();
+    result.stats.instructions=singlePass.instructions.length;
+    result.phases.irgen={time:(performance.now()-t2).toFixed(2),ok:true};
   } catch(e){
-    result.errors.push({phase:'Semantic',message:e.message,line:e.line});
+    result.errors.push({phase:e.phase||'SinglePass',message:e.message,line:e.line,col:e.col});
     result.phases.semantic={time:(performance.now()-t2).toFixed(2),ok:false};
+    result.phases.irgen={time:(performance.now()-t2).toFixed(2),ok:false};
     return result;
   }
 
   const t3=performance.now();
   try {
-    // Phase 4: IR Generation
-    const irGen=new IRGen();
-    irGen.gen(result.ast);
-    result.ir=irGen.formatIR();
-    result.stats.instructions=irGen.instructions.length;
-    result.phases.irgen={time:(performance.now()-t3).toFixed(2),ok:true};
-
     // Phase 5: Assembly Generation
-    const asmGen=new AsmGen(irGen.instructions);
+    const asmGen=new AsmGen(singlePass.instructions);
     result.assembly=asmGen.gen();
     result.phases.asm={time:(performance.now()-t3).toFixed(2),ok:true};
 
@@ -959,7 +1143,7 @@ function compile(sourceCode, outputCallback){
     if(result.errors.length===0){
       const t4=performance.now();
       let programOutput='';
-      const vm=new VirtualMachine(irGen.instructions,(s)=>{programOutput+=s;if(outputCallback)outputCallback(s);});
+      const vm=new VirtualMachine(singlePass.instructions,(s)=>{programOutput+=s;if(outputCallback)outputCallback(s);});
       vm.run();
       result.output=programOutput;
       result.phases.vm={time:(performance.now()-t4).toFixed(2),ok:true};

@@ -425,6 +425,158 @@ class IRGen{
   format(){return this.instructions.map((ins,i)=>{const{op,arg1,arg2,result}=ins;let s='';switch(op){case'FUNC_BEGIN':s=`\nFUNC ${arg1}:`;break;case'FUNC_END':s=`END FUNC ${arg1}\n`;break;case'PARAM':s=`  PARAM ${arg1} ${result}`;break;case'LABEL':s=`${arg1}:`;break;case'GOTO':s=`  GOTO ${result}`;break;case'IF_FALSE':s=`  IF_FALSE ${arg1} GOTO ${result}`;break;case'ASSIGN':s=`  ${result} = ${arg1}`;break;case'DECLARE':s=`  DECLARE ${arg1} ${result}`;break;case'RETURN':s=`  RETURN${arg1?' '+arg1:''}`;break;case'PRINT':s=`  PRINT ${arg1}`;break;case'BREAK':s=`  BREAK`;break;case'CONTINUE':s=`  CONTINUE`;break;case'ARG':s=`  ARG ${arg1}`;break;case'CALL':s=`  ${result} = CALL ${arg1} ${arg2}`;break;case'NEG':s=`  ${result} = NEG ${arg1}`;break;case'NOT':s=`  ${result} = NOT ${arg1}`;break;default:s=`  ${result} = ${arg1} ${op} ${arg2}`;}return`${String(i).padStart(3,'0')}: ${s}`;}).join('\n');}
 }
 
+// ── Single-Pass Lowering (Semantic + IR in one traversal) ──
+class SinglePassCompiler extends IRGen{
+  constructor(){
+    super();
+    this.scope=new SymbolTable();
+    this.currentFunc=null;
+    this.loopDepth=0;
+    this.errors=[];
+  }
+  err(m,l){this.errors.push(new SemanticError(m,l));}
+  push(){this.scope=new SymbolTable(this.scope);}pop(){this.scope=this.scope.parent;}
+  canAssign(targetType,valueType){return valueType===targetType||(targetType==='int'&&valueType==='bool')||valueType==='unknown';}
+
+  lower(n){
+    if(!n)return;
+    switch(n.type){
+      case'Program':n.declarations.forEach(d=>this.lower(d));break;
+      case'VarDecl':{
+        if(this.scope.has(n.name))this.err(`Variable '${n.name}' already declared in this scope`,n.line);
+        if(n.init){
+          const rhs=this.lowerExpr(n.init);
+          if(!this.canAssign(n.varType,rhs.type))this.err(`Cannot assign '${rhs.type}' to '${n.varType}'`,n.line);
+          this.emit('ASSIGN',rhs.place,null,n.name);
+        }else this.emit('DECLARE',n.varType,null,n.name);
+        this.scope.define(n.name,{varType:n.varType,kind:'var'});
+        break;
+      }
+      case'FuncDecl':{
+        if(this.scope.has(n.name))this.err(`Function '${n.name}' already declared`,n.line);
+        this.scope.define(n.name,{varType:n.retType,kind:'func',params:n.params});
+        this.emit('FUNC_BEGIN',n.name);
+        const prev=this.currentFunc;this.currentFunc={retType:n.retType,name:n.name};
+        this.push();
+        n.params.forEach(p=>{this.scope.define(p.name,{varType:p.type,kind:'param'});this.emit('PARAM',p.type,null,p.name);});
+        this.lower(n.body);
+        this.pop();
+        this.currentFunc=prev;
+        this.emit('FUNC_END',n.name);
+        break;
+      }
+      case'Block':this.push();n.statements.forEach(s=>this.lower(s));this.pop();break;
+      case'If':{
+        const c=this.lowerExpr(n.condition);
+        if(c.type!=='bool'&&c.type!=='int')this.err('Condition must be bool/int',n.line);
+        const el=this.label('else'),en=this.label('endif');
+        this.emit('IF_FALSE',c.place,null,el);
+        this.lower(n.thenBranch);
+        this.emit('GOTO',null,null,en);
+        this.emit('LABEL',el);
+        if(n.elseBranch)this.lower(n.elseBranch);
+        this.emit('LABEL',en);
+        break;
+      }
+      case'While':{
+        const sl=this.label('while'),el=this.label('endwhile');
+        this.emit('LABEL',sl);
+        const c=this.lowerExpr(n.condition);
+        if(c.type!=='bool'&&c.type!=='int')this.err('Condition must be bool/int',n.line);
+        this.emit('IF_FALSE',c.place,null,el);
+        this.loopDepth++;this.lower(n.body);this.loopDepth--;
+        this.emit('GOTO',null,null,sl);
+        this.emit('LABEL',el);
+        break;
+      }
+      case'For':{
+        this.push();
+        const sl=this.label('for'),el=this.label('endfor');
+        if(n.init)this.lower(n.init);
+        this.emit('LABEL',sl);
+        if(n.condition){
+          const c=this.lowerExpr(n.condition);
+          if(c.type!=='bool'&&c.type!=='int')this.err('Condition must be bool/int',n.line);
+          this.emit('IF_FALSE',c.place,null,el);
+        }
+        this.loopDepth++;this.lower(n.body);this.loopDepth--;
+        if(n.increment)this.lowerExpr(n.increment);
+        this.emit('GOTO',null,null,sl);
+        this.emit('LABEL',el);
+        this.pop();
+        break;
+      }
+      case'Return':{
+        if(!this.currentFunc)this.err('Return outside function',n.line);
+        const rv=n.value?this.lowerExpr(n.value):{type:'void',place:null};
+        if(this.currentFunc&&!this.canAssign(this.currentFunc.retType,rv.type))this.err(`Return type mismatch: expected '${this.currentFunc.retType}', got '${rv.type}'`,n.line);
+        this.emit('RETURN',rv.place);
+        break;
+      }
+      case'Break':if(this.loopDepth===0)this.err("'break' outside loop",n.line);this.emit('BREAK');break;
+      case'Continue':if(this.loopDepth===0)this.err("'continue' outside loop",n.line);this.emit('CONTINUE');break;
+      case'Print':{const vs=n.args.map(a=>this.lowerExpr(a).place);this.emit('PRINT',vs.join('|||'));break;}
+      case'ExprStmt':this.lowerExpr(n.expression);break;
+    }
+  }
+
+  lowerExpr(n){
+    if(!n)return{type:'void',place:null};
+    switch(n.type){
+      case'Assign':{
+        const s=this.scope.lookup(n.name);
+        if(!s)this.err(`Undeclared variable '${n.name}'`,n.line);
+        const rhs=this.lowerExpr(n.value);
+        if(s&&!this.canAssign(s.varType,rhs.type))this.err(`Cannot assign '${rhs.type}' to '${n.name}'`,n.line);
+        this.emit('ASSIGN',rhs.place,null,n.name);
+        return{type:s?.varType||'int',place:n.name};
+      }
+      case'BinOp':{
+        const l=this.lowerExpr(n.left),r=this.lowerExpr(n.right);
+        const arith=['+','-','*','/','%'];
+        const cmp=['<','>','<=','>='];
+        const eq=['==','!='];
+        let out='bool';
+        if(arith.includes(n.op)){if(l.type!=='int'||r.type!=='int')this.err(`Arithmetic '${n.op}' requires int`,n.line);out='int';}
+        else if(cmp.includes(n.op)){if(l.type!=='int'||r.type!=='int')this.err(`Comparison '${n.op}' requires int`,n.line);out='bool';}
+        else if(eq.includes(n.op)){if(l.type!==r.type)this.err(`Type mismatch in '${n.op}': '${l.type}' vs '${r.type}'`,n.line);out='bool';}
+        const t=this.tmp();
+        const op={'+':'ADD','-':'SUB','*':'MUL','/':'DIV','%':'MOD','==':'EQ','!=':'NEQ','<':'LT','>':'GT','<=':'LTE','>=':'GTE','&&':'AND','||':'OR'}[n.op]||n.op;
+        this.emit(op,l.place,r.place,t);
+        return{type:out,place:t};
+      }
+      case'Unary':{
+        const v=this.lowerExpr(n.expr);
+        if(n.op==='-'&&v.type!=='int')this.err("Unary '-' requires int",n.line);
+        const t=this.tmp();
+        this.emit(n.op==='-'?'NEG':'NOT',v.place,null,t);
+        return{type:n.op==='-'?'int':'bool',place:t};
+      }
+      case'Call':{
+        const s=this.scope.lookup(n.name);
+        if(!s)this.err(`Undeclared function '${n.name}'`,n.line);
+        if(s&&s.kind!=='func')this.err(`'${n.name}' is not a function`,n.line);
+        if(s?.params&&n.args.length!==s.params.length)this.err(`'${n.name}' expects ${s.params.length} args, got ${n.args.length}`,n.line);
+        const args=n.args.map(a=>this.lowerExpr(a));
+        args.forEach((a,i)=>{if(s?.params?.[i]&&!this.canAssign(s.params[i].type,a.type))this.err(`Arg ${i+1} type mismatch in call to '${n.name}'`,n.line);});
+        args.forEach(a=>this.emit('ARG',a.place));
+        const t=this.tmp();
+        this.emit('CALL',n.name,args.length,t);
+        return{type:s?.varType||'unknown',place:t};
+      }
+      case'Var':{
+        const s=this.scope.lookup(n.name);
+        if(!s)this.err(`Undeclared variable '${n.name}'`,n.line);
+        return{type:s?.varType||'int',place:n.name};
+      }
+      case'IntLit':return{type:'int',place:String(n.value)};
+      case'BoolLit':return{type:'bool',place:n.value?'1':'0'};
+      case'StringLit':return{type:'string',place:JSON.stringify(n.value)};
+      default:return{type:'unknown',place:null};
+    }
+  }
+}
+
 // ── Virtual Machine ──
 class VM{
   constructor(instrs,out){this.instrs=instrs;this.out=out||((s)=>console.log(s));this.lmap={};this.fmap={};this.steps=0;this.maxSteps=500000;this._args=[];this.buildMaps();}
@@ -542,13 +694,16 @@ function compile(src,outCb){
   try{const p=new Parser(res.tokens);res.ast=p.parse();res.phases.parser={time:(performance.now()-t1).toFixed(2),ok:true};}
   catch(e){res.errors.push({phase:e.phase||'Parser',message:e.message,line:e.line,col:e.col});res.phases.parser={ok:false,time:'—'};return res;}
   const t2=performance.now();
-  const sem=new SemanticAnalyzer();sem.analyze(res.ast);
-  sem.errors.forEach(e=>res.errors.push({phase:'Semantic',message:e.message,line:e.line}));
-  res.phases.semantic={time:(performance.now()-t2).toFixed(2),ok:sem.errors.length===0};
+  let singlePass=null;
+  try{singlePass=new SinglePassCompiler();singlePass.lower(res.ast);
+    singlePass.errors.forEach(e=>res.errors.push({phase:'Semantic',message:e.message,line:e.line}));
+    const spTime=(performance.now()-t2).toFixed(2);
+    res.phases.semantic={time:spTime,ok:singlePass.errors.length===0};
+    res.ir=singlePass.format();res.stats.instructions=singlePass.instructions.length;res.phases.irgen={time:spTime,ok:true};
+  }catch(e){res.errors.push({phase:e.phase||'SinglePass',message:e.message,line:e.line,col:e.col});res.phases.semantic={ok:false,time:'—'};res.phases.irgen={ok:false,time:'—'};return res;}
   const t3=performance.now();
-  try{const ig=new IRGen();ig.gen(res.ast);res.ir=ig.format();res.stats.instructions=ig.instructions.length;res.phases.irgen={time:(performance.now()-t3).toFixed(2),ok:true};
-    const ag=new AsmGen(ig.instructions);res.assembly=ag.gen();res.phases.asm={time:(performance.now()-t3).toFixed(2),ok:true};
-    if(res.errors.length===0){let prog='';const vm=new VM(ig.instructions,(s)=>{prog+=s;if(outCb)outCb(s);});vm.run();res.output=prog;res.phases.vm={time:(performance.now()-t3).toFixed(2),ok:true};}
+  try{const ag=new AsmGen(singlePass.instructions);res.assembly=ag.gen();res.phases.asm={time:(performance.now()-t3).toFixed(2),ok:true};
+    if(res.errors.length===0){let prog='';const vm=new VM(singlePass.instructions,(s)=>{prog+=s;if(outCb)outCb(s);});vm.run();res.output=prog;res.phases.vm={time:(performance.now()-t3).toFixed(2),ok:true};}
   }catch(e){res.errors.push({phase:e.phase||'Execution',message:e.message,line:e.line});res.phases.vm={ok:false,time:'—'};}
   res.stats.lines=src.split('\n').length;res.stats.errors=res.errors.length;res.success=res.errors.length===0;res.totalTime=(performance.now()-t0).toFixed(2);
   return res;
@@ -986,6 +1141,61 @@ function renderTokens(r){
 
 function renderAST(r){
   if(!r.ast) return'<div class="output-empty">Run compiler to see AST</div>';
+
+  function shortValue(v){
+    if(v===undefined) return '';
+    if(v&&typeof v==='object') return v.type?`<${v.type}>`:'<object>';
+    return JSON.stringify(v);
+  }
+
+  function normalizeParamNode(p,line){
+    return {type:'Param',name:p.name,varType:p.type,line};
+  }
+
+  function nodeLabel(node){
+    if(!node||typeof node!=='object') return '?';
+    let label=node.type||'?';
+    if(node.name) label+=`(${node.name})`;
+    if(node.op) label+=` op=${node.op}`;
+    if(node.varType) label+=` type=${node.varType}`;
+    if(node.retType) label+=` ret=${node.retType}`;
+    if(node.value!==undefined&&node.type!=='Block') label+=` val=${shortValue(node.value)}`;
+    return label;
+  }
+
+  function astChildren(node){
+    const children=[];
+    if(!node||typeof node!=='object') return children;
+    const keys=['declarations','params','condition','init','left','right','expr','value','args','thenBranch','elseBranch','increment','body','statements'];
+
+    if(Array.isArray(node.params)){
+      node.params.forEach(p=>children.push(normalizeParamNode(p,node.line)));
+    }
+
+    keys.forEach(k=>{
+      if(!node[k]) return;
+      if(k==='params') return;
+      if(Array.isArray(node[k])){
+        node[k].forEach(c=>{ if(c&&typeof c==='object') children.push(c); });
+      } else if(typeof node[k]==='object') {
+        children.push(node[k]);
+      }
+    });
+    return children;
+  }
+
+  function buildAscii(node,prefix,isLast,lines){
+    const branch=prefix===''?'':(isLast?'`- ':'|- ');
+    lines.push(prefix+branch+nodeLabel(node));
+    const kids=astChildren(node);
+    const nextPrefix=prefix+(prefix===''?'':(isLast?'   ':'|  '));
+    kids.forEach((c,i)=>buildAscii(c,nextPrefix,i===kids.length-1,lines));
+  }
+
+  const asciiLines=[];
+  buildAscii(r.ast,'',true,asciiLines);
+  const asciiHtml=`<div style="margin-bottom:12px"><div class="ast-prop" style="margin-bottom:6px">AST (Text Tree)</div><pre style="margin:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:11px;line-height:1.5;white-space:pre;overflow:auto">${escHtml(asciiLines.join('\n'))}</pre></div>`;
+
   function nodeHtml(node,depth=0){
     if(!node||typeof node!=='object')return'';
     const type=node.type||'?';
@@ -995,13 +1205,14 @@ function renderAST(r){
     if(node.varType)props+=` <span class="ast-prop">type="${node.varType}"</span>`;
     if(node.retType)props+=` <span class="ast-prop">ret="${node.retType}"</span>`;
     if(node.op)props+=` <span class="ast-prop">op="${node.op}"</span>`;
-    if(node.value!==undefined&&node.type!=='Block')props+=` <span class="ast-prop">val=${JSON.stringify(node.value)}</span>`;
+    if(node.value!==undefined&&node.type!=='Block')props+=` <span class="ast-prop">val=${escHtml(shortValue(node.value))}</span>`;
     let children='';
-    const childKeys=['declarations','statements','params','args','body','thenBranch','elseBranch','condition','left','right','expr','value','init','increment'];
+    if(Array.isArray(node.params)) node.params.forEach(p=>{children+=nodeHtml(normalizeParamNode(p,node.line),depth+1);});
+    const childKeys=['declarations','condition','init','left','right','expr','value','args','thenBranch','elseBranch','increment','body','statements'];
     childKeys.forEach(k=>{if(node[k]){if(Array.isArray(node[k]))node[k].forEach(c=>{children+=nodeHtml(c,depth+1);});else children+=nodeHtml(node[k],depth+1);}});
     return`<div class="ast-node"><div class="ast-node-header"><span class="ast-node-type ${colorClass}">◆ ${type}</span>${props}<span class="ast-prop" style="margin-left:auto">L${node.line||'?'}</span></div>${children}</div>`;
   }
-  return`<div style="font-size:12px">${nodeHtml(r.ast)}</div>`;
+  return`${asciiHtml}<div style="font-size:12px">${nodeHtml(r.ast)}</div>`;
 }
 
 function renderIR(r){
