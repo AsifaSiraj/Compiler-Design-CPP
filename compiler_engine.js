@@ -18,7 +18,7 @@ const TokenType = {
   // Keywords
   IF: 'if', ELSE: 'else', WHILE: 'while', FOR: 'for',
   RETURN: 'return', BREAK: 'break', CONTINUE: 'continue',
-  PRINT: 'print', INPUT: 'input', TRUE: 'true', FALSE: 'false',
+  PRINT: 'cout', INPUT: 'cin', TRUE: 'true', FALSE: 'false',
   // Identifiers
   IDENTIFIER: 'IDENTIFIER',
   // Operators
@@ -27,7 +27,7 @@ const TokenType = {
   EQ: '==', NEQ: '!=', LT: '<', GT: '>', LTE: '<=', GTE: '>=',
   AND: '&&', OR: '||', NOT: '!',
   // Delimiters
-  LPAREN: '(', RPAREN: ')', LBRACE: '{', RBRACE: '}',
+  LPAREN: '(', RPAREN: ')', LBRACE: '{', RBRACE: '}', OUT: '<<', IN: '>>',
   SEMICOLON: ';', COMMA: ',',
   // Special
   EOF: 'EOF',
@@ -37,8 +37,8 @@ const KEYWORDS = {
   int: TokenType.INT, bool: TokenType.BOOL, void: TokenType.VOID,
   if: TokenType.IF, else: TokenType.ELSE, while: TokenType.WHILE,
   for: TokenType.FOR, return: TokenType.RETURN, break: TokenType.BREAK,
-  continue: TokenType.CONTINUE, print: TokenType.PRINT,
-  input: TokenType.INPUT, true: TokenType.TRUE, false: TokenType.FALSE,
+  continue: TokenType.CONTINUE, cout: TokenType.PRINT,
+  cin: TokenType.INPUT, true: TokenType.TRUE, false: TokenType.FALSE,
 };
 
 class Token {
@@ -153,11 +153,13 @@ class Lexer {
         case '!': tok = new Token(this.match('=') ? TokenType.NEQ : TokenType.NOT, this.peek(-1)==='=' ? '!=' : '!', startLine, startCol);
           { const p = this.source[this.pos-1]; tok = new Token(p==='=' ? TokenType.NEQ : TokenType.NOT, p==='='?'!=':'!', startLine, startCol); }
           break;
-        case '<': tok = new Token(this.match('=') ? TokenType.LTE : TokenType.LT, this.source[this.pos-1]==='='?'<=':'<', startLine, startCol);
-          { const p = this.source[this.pos-1]; tok = new Token(p==='='?TokenType.LTE:TokenType.LT, p==='='?'<=':'<', startLine, startCol); }
+        case '<': 
+          if (this.match('<')) tok = mk(TokenType.OUT, '<<'); 
+          else tok = this.match('=') ? mk(TokenType.LTE, '<=') : mk(TokenType.LT, '<'); 
           break;
-        case '>': tok = new Token(this.match('=') ? TokenType.GTE : TokenType.GT, this.source[this.pos-1]==='='?'>=':'>', startLine, startCol);
-          { const p = this.source[this.pos-1]; tok = new Token(p==='='?TokenType.GTE:TokenType.GT, p==='='?'>=':'>', startLine, startCol); }
+        case '>': 
+          if (this.match('>')) tok = mk(TokenType.IN, '>>'); 
+          else tok = this.match('=') ? mk(TokenType.GTE, '>=') : mk(TokenType.GT, '>'); 
           break;
         case '&': if (this.match('&')) tok = new Token(TokenType.AND,'&&',startLine,startCol); else this.error(`Unexpected char '&', did you mean '&&'?`); break;
         case '|': if (this.match('|')) tok = new Token(TokenType.OR,'||',startLine,startCol); else this.error(`Unexpected char '|', did you mean '||'?`); break;
@@ -199,8 +201,8 @@ class CleanLexer extends Lexer {
         case '%': tok=mk(TokenType.PERCENT,'%'); break;
         case '=': tok=this.match('=')?mk(TokenType.EQ,'=='):mk(TokenType.ASSIGN,'='); break;
         case '!': tok=this.match('=')?mk(TokenType.NEQ,'!='):mk(TokenType.NOT,'!'); break;
-        case '<': tok=this.match('=')?mk(TokenType.LTE,'<='):mk(TokenType.LT,'<'); break;
-        case '>': tok=this.match('=')?mk(TokenType.GTE,'>='):mk(TokenType.GT,'>'); break;
+        case '<': tok=this.match('<')?mk(TokenType.OUT,'<<'):(this.match('=')?mk(TokenType.LTE,'<='):mk(TokenType.LT,'<')); break;
+        case '>': tok=this.match('>')?mk(TokenType.IN,'>>'):(this.match('=')?mk(TokenType.GTE,'>='):mk(TokenType.GT,'>')); break;
         case '&': if(this.match('&'))tok=mk(TokenType.AND,'&&'); else this.error("Expected '&&'"); break;
         case '|': if(this.match('|'))tok=mk(TokenType.OR,'||'); else this.error("Expected '||'"); break;
         case '(': tok=mk(TokenType.LPAREN,'('); break;
@@ -232,6 +234,7 @@ class ReturnNode extends ASTNode { constructor(val,line){super('Return',line);th
 class BreakNode extends ASTNode { constructor(line){super('Break',line);} }
 class ContinueNode extends ASTNode { constructor(line){super('Continue',line);} }
 class PrintNode extends ASTNode { constructor(args,line){super('Print',line);this.args=args;} }
+class InputNode extends ASTNode { constructor(vars,line){super('Input',line);this.vars=vars;} }
 class ExprStmtNode extends ASTNode { constructor(expr,line){super('ExprStmt',line);this.expression=expr;} }
 class AssignNode extends ASTNode { constructor(name,val,line){super('Assign',line);this.name=name;this.value=val;} }
 class BinOpNode extends ASTNode { constructor(op,left,right,line){super('BinOp',line);this.op=op;this.left=left;this.right=right;} }
@@ -315,8 +318,9 @@ class Parser {
     if(this.match(TokenType.RETURN)) return this.parseReturn(tok.line);
     if(this.match(TokenType.BREAK)){ this.consume(TokenType.SEMICOLON,"Expected ';'"); return new BreakNode(tok.line); }
     if(this.match(TokenType.CONTINUE)){ this.consume(TokenType.SEMICOLON,"Expected ';'"); return new ContinueNode(tok.line); }
-    if(this.match(TokenType.PRINT)) return this.parsePrint(tok.line);
-    if(this.check(TokenType.LBRACE)) return this.parseBlock();
+    // if(this.match(TokenType.PRINT)) return this.parsePrint(tok.line);
+    if (this.match(TokenType.PRINT)) return this.parseCout(tok.line); 
+    if (this.match(TokenType.INPUT)) return this.parseCin(tok.line);    if(this.check(TokenType.LBRACE)) return this.parseBlock();
     return this.parseExprStmt();
   }
 
@@ -362,16 +366,20 @@ class Parser {
     return new ReturnNode(val,line);
   }
 
-  parsePrint(line){
-    this.consume(TokenType.LPAREN,"Expected '(' after 'print'");
-    const args=[];
-    if(!this.check(TokenType.RPAREN)){
-      do { args.push(this.parseExpr()); } while(this.match(TokenType.COMMA));
-    }
-    this.consume(TokenType.RPAREN,"Expected ')' after print args");
-    this.consume(TokenType.SEMICOLON,"Expected ';' after print");
-    return new PrintNode(args,line);
-  }
+  // parsePrint(line){
+  //   this.consume(TokenType.Out,"Expected '(' after 'print'");
+  //   const args=[];
+  //   if(!this.check(TokenType.RPAREN)){
+  //     do { args.push(this.parseExpr()); } while(this.match(TokenType.COMMA));
+  //   }
+  //   this.consume(TokenType.RPAREN,"Expected ')' after print args");
+  //   this.consume(TokenType.SEMICOLON,"Expected ';' after print");
+  //   return new PrintNode(args,line);
+  // }
+
+  parseCout(l){const a=[];this.consume(TokenType.OUT,"Expected '<<' after cout");a.push(this.parseExpr());while(this.check(TokenType.OUT)){this.advance();a.push(this.parseExpr());}this.consume(TokenType.SEMICOLON,"Expected ';' after cout statement");return new PrintNode(a,l);}
+
+  parseCin(l){const a=[];this.consume(TokenType.IN,"Expected '>>' after cin");if(this.check(TokenType.IDENTIFIER)){a.push(new VarNode(this.advance().value,l));}else{throw new ParseError("cin >> requires a variable name",this.peek());}while(this.check(TokenType.IN)){this.advance();if(this.check(TokenType.IDENTIFIER)){a.push(new VarNode(this.advance().value,l));}else{throw new ParseError("cin >> requires a variable name",this.peek());}}this.consume(TokenType.SEMICOLON,"Expected ';' after cin statement");return new InputNode(a,l);}
 
   parseExprStmt(){
     const line=this.peek().line;
@@ -509,6 +517,7 @@ class SemanticAnalyzer {
       case 'Break': if(this.loopDepth===0) this.error("'break' outside loop",node.line); break;
       case 'Continue': if(this.loopDepth===0) this.error("'continue' outside loop",node.line); break;
       case 'Print': node.args.forEach(a=>this.analyze(a)); break;
+      case 'Input': node.vars.forEach(v=>{ const sym=this.scope.lookup(v.name); if(!sym) this.error(`Undeclared variable '${v.name}'`,node.line); }); break;
       case 'ExprStmt': return this.analyze(node.expression);
       case 'Assign': return this.analyzeAssign(node);
       case 'BinOp': return this.analyzeBinOp(node);
@@ -645,6 +654,7 @@ class IRGen {
       case 'Break': this.emit('BREAK',null,null,null); break;
       case 'Continue': this.emit('CONTINUE',null,null,null); break;
       case 'Print': { const vals=node.args.map(a=>this.gen(a)); this.emit('PRINT',vals.join(','),null,null); break; }
+      case 'Input': { node.vars.forEach(v=>this.emit('INPUT',null,null,v.name)); break; }
       case 'ExprStmt': return this.gen(node.expression);
       case 'Assign': { const v=this.gen(node.value); this.emit('ASSIGN',v,null,node.name); return node.name; }
       case 'BinOp': { const l=this.gen(node.left),r=this.gen(node.right),t=this.tmp(); this.emit(this.opCode(node.op),l,r,t); return t; }
@@ -675,6 +685,7 @@ class IRGen {
         case 'DECLARE': s=`  DECLARE ${arg1} ${result}`; break;
         case 'RETURN': s=`  RETURN${arg1?' '+arg1:''}`; break;
         case 'PRINT': s=`  PRINT ${arg1}`; break;
+        case 'INPUT': s=`  INPUT ${result}`; break;
         case 'BREAK': s=`  BREAK`; break;
         case 'CONTINUE': s=`  CONTINUE`; break;
         case 'ARG': s=`  ARG ${arg1}`; break;
@@ -805,6 +816,14 @@ class SinglePassCompiler extends IRGen {
         this.emit('PRINT',vals.join(','),null,null);
         break;
       }
+      case 'Input': {
+        node.vars.forEach(v=>{
+          const sym=this.scope.lookup(v.name);
+          if(!sym) this.error(`Undeclared variable '${v.name}'`,node.line);
+          this.emit('INPUT',null,null,v.name);
+        });
+        break;
+      }
       case 'ExprStmt':
         this.lowerExpr(node.expression);
         break;
@@ -882,9 +901,10 @@ class SinglePassCompiler extends IRGen {
 class VMError extends Error { constructor(msg,line){super(msg);this.phase='VM';this.line=line;} }
 
 class VirtualMachine {
-  constructor(instructions, outputCallback){
+  constructor(instructions, outputCallback, inputProvider){
     this.instructions=instructions;
     this.output=outputCallback||((s)=>console.log(s));
+    this.inputProvider=inputProvider||null;
     this.labelMap={};
     this.funcMap={};
     this.callStack=[];
@@ -957,7 +977,21 @@ class VirtualMachine {
       }
       case 'PRINT': {
         const parts=arg1.split(',').map(v=>this.resolve(v.trim(),env));
-        this.output(parts.map(p=>p===null?'null':String(p)).join(' ')+'\n');
+        this.output(parts.map(p=>p===null?'null':String(p)).join(''));
+        return pc+1;
+      }
+      case 'INPUT': {
+        // In a browser/non-interactive context, use the inputProvider if set, else prompt(), else 0
+        let val;
+        if(this.inputProvider){
+          val=this.inputProvider(result);
+        } else if(typeof prompt!=='undefined'){
+          val=prompt(`cin >> ${result}:`);
+        } else {
+          val=0;
+        }
+        const parsed=Number(val);
+        env[result]=isNaN(parsed)?String(val):parsed;
         return pc+1;
       }
       case 'BREAK': return null;
@@ -1062,6 +1096,7 @@ class AsmGen {
         case 'IF_FALSE': lines.push(`  mov rax, ${this.op2asm(arg1)}`,`  test rax, rax`,`  jz ${result}`); break;
         case 'RETURN': lines.push(arg1?`  mov rax, ${this.op2asm(arg1)}`:'',`  pop rbp`,`  ret`); break;
         case 'PRINT': lines.push(`  ; SYSCALL PRINT ${arg1}`); break;
+        case 'INPUT': lines.push(`  ; SYSCALL INPUT → ${result}`); break;
         case 'NEG': lines.push(`  mov rax, ${this.op2asm(arg1)}`,`  neg rax`,`  mov [rbp-${this.stackOffset(result)}], rax`); break;
         case 'ARG': lines.push(`  push ${this.op2asm(arg1)}`); break;
         case 'CALL': lines.push(`  call ${arg1}`,`  mov [rbp-${this.stackOffset(result)}], rax`); break;
@@ -1080,7 +1115,7 @@ class AsmGen {
 // ─────────────────────────────────────────────────────────────
 // MAIN COMPILER ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────
-function compile(sourceCode, outputCallback){
+function compile(sourceCode, outputCallback, inputProvider){
   const result={
     tokens:[], ast:null, semanticErrors:[], ir:'', assembly:'',
     output:'', errors:[], phases:{}, success:false,
@@ -1143,7 +1178,7 @@ function compile(sourceCode, outputCallback){
     if(result.errors.length===0){
       const t4=performance.now();
       let programOutput='';
-      const vm=new VirtualMachine(singlePass.instructions,(s)=>{programOutput+=s;if(outputCallback)outputCallback(s);});
+      const vm=new VirtualMachine(singlePass.instructions,(s)=>{programOutput+=s;if(outputCallback)outputCallback(s);},inputProvider);
       vm.run();
       result.output=programOutput;
       result.phases.vm={time:(performance.now()-t4).toFixed(2),ok:true};
@@ -1161,4 +1196,4 @@ function compile(sourceCode, outputCallback){
 }
 
 // Export for use in HTML
-if(typeof window !== 'undefined') window.ABCCompiler = { compile, TokenType };
+if(typeof window !== 'undefined') window.ABCCompiler = { compile, TokenType, InputNode };
