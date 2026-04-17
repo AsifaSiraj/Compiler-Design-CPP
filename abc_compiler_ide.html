@@ -731,7 +731,7 @@
       <div class="logo">
         <div class="logo-icon">C++</div>
         <div class="logo-text">ABC<span>Tech</span> Compiler</div>
-        <div class="badge">v1.0 — Lightweight C++ Subset</div>
+        <div class="badge">v2.0 — C++ Subset (iostream)</div>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" onclick="clearEditor()">Clear</button>
@@ -803,10 +803,22 @@
           >
             <span class="example-icon">⚠️</span>Error Demo
           </button>
+          <button
+            class="example-btn"
+            onclick="loadExample('cin_demo')"
+            id="ex-cin_demo"
+          >
+            <span class="example-icon">⌨️</span>cin / cout
+          </button>
         </div>
 
         <div class="sidebar-title" style="padding: 12px 12px 4px">Pipeline</div>
         <div id="phaseList" class="phase-list">
+          <div class="phase-item idle" id="ph-preproc">
+            <div class="phase-dot idle" id="pd-preproc"></div>
+            <div class="phase-name">Preprocessor</div>
+            <div class="phase-time" id="pt-preproc">—</div>
+          </div>
           <div class="phase-item idle" id="ph-lexer">
             <div class="phase-dot idle" id="pd-lexer"></div>
             <div class="phase-name">Lexer</div>
@@ -881,7 +893,7 @@
                 border-radius: 3px;
               "
             >
-              C++ Subset
+              C++ / iostream
             </div>
           </div>
         </div>
@@ -960,6 +972,7 @@
         INT: "int",
         BOOL: "bool",
         VOID: "void",
+        STRING_TYPE: "string",
         IF: "if",
         ELSE: "else",
         WHILE: "while",
@@ -1001,6 +1014,7 @@
         int: TokenType.INT,
         bool: TokenType.BOOL,
         void: TokenType.VOID,
+        string: TokenType.STRING_TYPE,
         if: TokenType.IF,
         else: TokenType.ELSE,
         while: TokenType.WHILE,
@@ -1423,9 +1437,12 @@
           return new ProgramNode(d, l);
         }
         isType() {
-          return [TokenType.INT, TokenType.BOOL, TokenType.VOID].includes(
-            this.peek().type,
-          );
+          return [
+            TokenType.INT,
+            TokenType.BOOL,
+            TokenType.VOID,
+            TokenType.STRING_TYPE,
+          ].includes(this.peek().type);
         }
         parseDecl() {
           if (this.isType()) return this.parseTyped();
@@ -2144,6 +2161,7 @@
           return (
             valueType === targetType ||
             (targetType === "int" && valueType === "bool") ||
+            (targetType === "string" && valueType === "string") ||
             valueType === "unknown"
           );
         }
@@ -2849,8 +2867,49 @@
           success: false,
         };
         const t0 = performance.now();
+
+        // ── Preprocessor: strip #include / using namespace, enforce boilerplate ──
+        const srcLines = src.split("\n");
+        const hasInclude = srcLines.some((l) =>
+          /^\s*#include\s*<iostream>/.test(l),
+        );
+        const hasUsing = srcLines.some((l) =>
+          /^\s*using\s+namespace\s+std\s*;/.test(l),
+        );
+        if (!hasInclude) {
+          res.errors.push({
+            phase: "Preprocessor",
+            message: "Missing '#include <iostream>' — required for cout/cin",
+            line: 1,
+          });
+          res.phases.preproc = { ok: false, time: "—" };
+          res.phases.lexer = { ok: false, time: "—" };
+          return res;
+        }
+        if (!hasUsing) {
+          res.errors.push({
+            phase: "Preprocessor",
+            message: "Missing 'using namespace std;' — required for cout/cin",
+            line: 1,
+          });
+          res.phases.preproc = { ok: false, time: "—" };
+          res.phases.lexer = { ok: false, time: "—" };
+          return res;
+        }
+        res.phases.preproc = {
+          ok: true,
+          time: (performance.now() - t0).toFixed(2),
+        };
+        // Strip preprocessor lines and replace endl with "\n" identifier
+        const cleanSrc = srcLines
+          .map((l) =>
+            /^\s*#/.test(l) || /^\s*using\s+namespace/.test(l) ? "" : l,
+          )
+          .join("\n")
+          .replace(/\bendl\b/g, '"\\n"');
+
         try {
-          const lx = new Lexer(src);
+          const lx = new Lexer(cleanSrc);
           res.tokens = lx.tokenize();
           res.stats.tokens = res.tokens.length;
           res.phases.lexer = {
@@ -2958,7 +3017,10 @@
       // IDE LOGIC
       // ═══════════════════════════════════════════════════════════
       const EXAMPLES = {
-        hello: `// Hello World — ABC Tech Compiler
+        hello: `#include <iostream>
+using namespace std;
+
+// Hello World — ABC Tech Compiler
 // Demonstrates: variables, strings, cout
 
 int main() {
@@ -2966,22 +3028,25 @@ int main() {
   int y = 8;
   int sum = x + y;
 
-  cout << "Hello, ABC Tech World!" << "\\n";
-  cout << "The answer is: " << sum << "\\n";
-  cout << "x = " << x << "  y = " << y << "\\n";
+  cout << "Hello, ABC Tech World!" << endl;
+  cout << "The answer is: " << sum << endl;
+  cout << "x = " << x << "  y = " << y << endl;
 
   // Test boolean expressions
   bool flag = true;
   if (flag) {
-    cout << "Flag is true!\\n";
+    cout << "Flag is true!" << endl;
   } else {
-    cout << "Flag is false!\\n";
+    cout << "Flag is false!" << endl;
   }
 
   return 0;
 }`,
 
-        fibonacci: `// Fibonacci Sequence — Iterative
+        fibonacci: `#include <iostream>
+using namespace std;
+
+// Fibonacci Sequence — Iterative
 // Demonstrates: while loops, multiple variables, arithmetic
 
 int main() {
@@ -2991,21 +3056,24 @@ int main() {
   int i = 0;
   int temp = 0;
 
-  cout << "Fibonacci sequence:\\n";
+  cout << "Fibonacci sequence:" << endl;
 
   while (i < n) {
-    cout << a << "\\n";
+    cout << a << endl;
     temp = a + b;
     a = b;
     b = temp;
     i = i + 1;
   }
 
-  cout << "Done! First " << n << " Fibonacci numbers printed.\\n";
+  cout << "Done! First " << n << " Fibonacci numbers printed." << endl;
   return 0;
 }`,
 
-        factorial: `// Factorial — Recursive Function
+        factorial: `#include <iostream>
+using namespace std;
+
+// Factorial — Recursive Function
 // Demonstrates: function declarations, recursion, return values
 
 int factorial(int n) {
@@ -3026,28 +3094,31 @@ int power(int base, int exp) {
 }
 
 int main() {
-  cout << "=== Factorial Calculator ===\\n";
+  cout << "=== Factorial Calculator ===" << endl;
 
   int i = 1;
   while (i <= 8) {
     int f = factorial(i);
-    cout << i << "! = " << f << "\\n";
+    cout << i << "! = " << f << endl;
     i = i + 1;
   }
 
-  cout << "\\n";
-  cout << "=== Powers of 2 ===\\n";
+  cout << endl;
+  cout << "=== Powers of 2 ===" << endl;
   int j = 0;
   while (j <= 10) {
     int p = power(2, j);
-    cout << "2^" << j << " = " << p << "\\n";
+    cout << "2^" << j << " = " << p << endl;
     j = j + 1;
   }
 
   return 0;
 }`,
 
-        bubblesort: `// Bubble Sort Simulation
+        bubblesort: `#include <iostream>
+using namespace std;
+
+// Bubble Sort Simulation
 // Demonstrates: for loops, nested loops, comparisons
 // (Arrays not supported; simulates with individual variables)
 
@@ -3082,14 +3153,14 @@ int isPrime(int n) {
 }
 
 int main() {
-  cout << "=== Sorting Demo (5 values) ===\\n";
+  cout << "=== Sorting Demo (5 values) ===" << endl;
   int a = 64;
   int b = 34;
   int c = 25;
   int d = 12;
   int e = 22;
 
-  cout << "Before: " << a << " " << b << " " << c << " " << d << " " << e << "\\n";
+  cout << "Before: " << a << " " << b << " " << c << " " << d << " " << e << endl;
 
   // Bubble sort 5 values (manual unroll)
   int tmp = 0;
@@ -3112,19 +3183,22 @@ int main() {
   // Pass 4
   if (a > b) { tmp = a; a = b; b = tmp; }
 
-  cout << "After:  " << a << " " << b << " " << c << " " << d << " " << e << "\\n";
+  cout << "After:  " << a << " " << b << " " << c << " " << d << " " << e << endl;
 
-  cout << "\\n";
-  cout << "=== Math Utilities ===\\n";
-  cout << "max(17, 42) = " << max(17, 42) << "\\n";
-  cout << "min(17, 42) = " << min(17, 42) << "\\n";
-  cout << "gcd(48, 18) = " << gcd(48, 18) << "\\n";
+  cout << endl;
+  cout << "=== Math Utilities ===" << endl;
+  cout << "max(17, 42) = " << max(17, 42) << endl;
+  cout << "min(17, 42) = " << min(17, 42) << endl;
+  cout << "gcd(48, 18) = " << gcd(48, 18) << endl;
 
   return 0;
 }`,
 
-        primes: `// Prime Number Sieve (up to 50)
-// Demonstrates: for loops, nested loops, break/continue
+        primes: `#include <iostream>
+using namespace std;
+
+// Prime Number Sieve (up to 50)
+// Demonstrates: for loops, while loops, break/continue
 
 int isPrime(int n) {
   if (n < 2) { return 0; }
@@ -3148,34 +3222,37 @@ int sumDigits(int n) {
 }
 
 int main() {
-  cout << "=== Prime Numbers up to 50 ===\\n";
+  cout << "=== Prime Numbers up to 50 ===" << endl;
 
   int count = 0;
   int i = 2;
 
   while (i <= 50) {
     if (isPrime(i)) {
-      cout << "Prime: " << i << " (digit sum: " << sumDigits(i) << ")\\n";
+      cout << "Prime: " << i << " (digit sum: " << sumDigits(i) << ")" << endl;
       count = count + 1;
     }
     i = i + 1;
   }
 
-  cout << "Total primes found: " << count << "\\n";
+  cout << "Total primes found: " << count << endl;
 
-  cout << "\\n";
-  cout << "=== For Loop Demo ===\\n";
+  cout << endl;
+  cout << "=== For Loop Demo ===" << endl;
 
   for (int j = 1; j <= 5; j = j + 1) {
     int sq = j * j;
     int cu = j * j * j;
-    cout << j << " squared = " << sq << "   cubed = " << cu << "\\n";
+    cout << j << " squared = " << sq << "   cubed = " << cu << endl;
   }
 
   return 0;
 }`,
 
-        scope: `// Scope & Functions Demo
+        scope: `#include <iostream>
+using namespace std;
+
+// Scope & Functions Demo
 // Demonstrates: variable scoping, multiple functions,
 // nested blocks, boolean logic
 
@@ -3214,42 +3291,45 @@ int collatz(int n) {
 }
 
 int main() {
-  cout << "=== Scope Demo ===\\n";
+  cout << "=== Scope Demo ===" << endl;
   int x = 10;
 
   {
-    int x = 20;   // inner scope shadows outer
-    cout << "Inner x: " << x << "\\n";
+    int x = 20;
+    cout << "Inner x: " << x << endl;
     {
       int x = 30;
-      cout << "Innermost x: " << x << "\\n";
+      cout << "Innermost x: " << x << endl;
     }
-    cout << "Back to inner x: " << x << "\\n";
+    cout << "Back to inner x: " << x << endl;
   }
 
-  cout << "Outer x: " << x << "\\n";
+  cout << "Outer x: " << x << endl;
 
-  cout << "\\n";
-  cout << "=== Function Demo ===\\n";
+  cout << endl;
+  cout << "=== Function Demo ===" << endl;
 
   int val = -7;
-  cout << "absolute(" << val << ") = " << absolute(val) << "\\n";
-  cout << "clamp(15, 0, 10) = " << clamp(15, 0, 10) << "\\n";
-  cout << "clamp(-5, 0, 10) = " << clamp(-5, 0, 10) << "\\n";
+  cout << "absolute(" << val << ") = " << absolute(val) << endl;
+  cout << "clamp(15, 0, 10) = " << clamp(15, 0, 10) << endl;
+  cout << "clamp(-5, 0, 10) = " << clamp(-5, 0, 10) << endl;
 
-  cout << "\\n";
-  cout << "=== Collatz Conjecture ===\\n";
+  cout << endl;
+  cout << "=== Collatz Conjecture ===" << endl;
   int start = 6;
   while (start <= 15) {
     int steps = collatz(start);
-    cout << "collatz(" << start << ") = " << steps << " steps\\n";
+    cout << "collatz(" << start << ") = " << steps << " steps" << endl;
     start = start + 1;
   }
 
   return 0;
 }`,
 
-        cin_demo: `// cin & cout Demo
+        cin_demo: `#include <iostream>
+using namespace std;
+
+// cin & cout Demo
 // Demonstrates: reading input with cin, printing with cout
 
 int double_it(int n) {
@@ -3257,7 +3337,7 @@ int double_it(int n) {
 }
 
 int main() {
-  cout << "=== cin / cout Demo ===\\n";
+  cout << "=== cin / cout Demo ===" << endl;
 
   int a = 0;
   int b = 0;
@@ -3271,20 +3351,23 @@ int main() {
   int sum = a + b;
   int product = a * b;
 
-  cout << "Sum:     " << sum << "\\n";
-  cout << "Product: " << product << "\\n";
-  cout << "Double a: " << double_it(a) << "\\n";
+  cout << "Sum:     " << sum << endl;
+  cout << "Product: " << product << endl;
+  cout << "Double a: " << double_it(a) << endl;
 
   if (a > b) {
-    cout << a << " is greater\\n";
+    cout << a << " is greater" << endl;
   } else {
-    cout << b << " is greater (or equal)\\n";
+    cout << b << " is greater (or equal)" << endl;
   }
 
   return 0;
 }`,
 
-        errors: `// Error Demonstration
+        errors: `#include <iostream>
+using namespace std;
+
+// Error Demonstration
 // This code intentionally has semantic errors
 // Try fixing them to see compilation succeed!
 
@@ -3297,7 +3380,7 @@ int main() {
   // bool flag = 42;
 
   // ERROR 2: Undeclared variable
-  // cout << undeclared_var << "\\n";
+  // cout << undeclared_var << endl;
 
   // ERROR 3: Wrong argument count
   // int r = add(1, 2, 3);
@@ -3309,7 +3392,7 @@ int main() {
   int x = 5;
   int y = 10;
   int result = add(x, y);
-  cout << "5 + 10 = " << result << "\\n";
+  cout << "5 + 10 = " << result << endl;
 
   // Uncomment lines above one at a time to see error messages!
   return 0;
@@ -3401,7 +3484,15 @@ int main() {
 
       // ── Phase UI updates ──
       function resetPhases() {
-        ["lexer", "parser", "semantic", "irgen", "asm", "vm"].forEach((p) => {
+        [
+          "preproc",
+          "lexer",
+          "parser",
+          "semantic",
+          "irgen",
+          "asm",
+          "vm",
+        ].forEach((p) => {
           const ph = document.getElementById("ph-" + p),
             pd = document.getElementById("pd-" + p),
             pt = document.getElementById("pt-" + p);
@@ -3492,6 +3583,7 @@ int main() {
               TokenType.INT,
               TokenType.BOOL,
               TokenType.VOID,
+              TokenType.STRING_TYPE,
               TokenType.IF,
               TokenType.ELSE,
               TokenType.WHILE,
