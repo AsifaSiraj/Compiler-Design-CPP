@@ -605,6 +605,67 @@
       .ast-color-Input {
         color: var(--accent2);
       }
+      .ast-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 8px;
+      }
+      .ast-fullscreen-btn {
+        font-size: 11px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      .ast-fullscreen-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .ast-diagram-shell {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface2);
+        overflow: auto;
+        padding: 6px;
+      }
+      .ast-diagram-svg {
+        display: block;
+        max-width: none;
+      }
+      #ast-diagram-root:fullscreen,
+      #ast-diagram-root:-webkit-full-screen {
+        background: var(--bg);
+        padding: 14px;
+        overflow: hidden;
+      }
+      #ast-diagram-root:fullscreen .ast-diagram-shell,
+      #ast-diagram-root:-webkit-full-screen .ast-diagram-shell {
+        width: 100%;
+        height: calc(100vh - 70px);
+        padding: 8px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #ast-diagram-root:fullscreen .ast-diagram-svg,
+      #ast-diagram-root:-webkit-full-screen .ast-diagram-svg {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+      }
+      #ast-diagram-root:fullscreen .ast-diagram-svg text,
+      #ast-diagram-root:-webkit-full-screen .ast-diagram-svg text {
+        font-size: 19px;
+        font-weight: 700;
+      }
+      #ast-diagram-root:fullscreen .ast-diagram-svg line,
+      #ast-diagram-root:-webkit-full-screen .ast-diagram-svg line {
+        stroke-width: 2.2;
+      }
 
       /* Assembly view */
       .asm-view {
@@ -1472,10 +1533,23 @@
             const bd = this.parseBlock();
             return new FuncDeclNode(tt.value, nm, ps, bd, l);
           }
+          // Variable declaration(s) — support comma-separated
+          const decls = [];
           let init = null;
           if (this.match(TokenType.ASSIGN)) init = this.parseExpr();
+          decls.push(new VarDeclNode(tt.value, nm, init, l));
+          while (this.match(TokenType.COMMA)) {
+            const vn = this.consume(
+              TokenType.IDENTIFIER,
+              "Expected identifier after ','",
+            ).value;
+            let vi = null;
+            if (this.match(TokenType.ASSIGN)) vi = this.parseExpr();
+            decls.push(new VarDeclNode(tt.value, vn, vi, l));
+          }
           this.consume(TokenType.SEMICOLON, "Expected ';'");
-          return new VarDeclNode(tt.value, nm, init, l);
+          if (decls.length === 1) return decls[0];
+          return new BlockNode(decls, l);
         }
         parseBlock() {
           const l = this.peek().line;
@@ -2212,11 +2286,21 @@
               this.emit("FUNC_END", n.name);
               break;
             }
-            case "Block":
-              this.push();
-              n.statements.forEach((s) => this.lower(s));
-              this.pop();
+            case "Block": {
+              // Check if this is a pseudo-block from comma-separated variable declarations
+              const isVarDeclBlock =
+                n.statements && n.statements.every((s) => s && s.type === "VarDecl");
+              if (isVarDeclBlock) {
+                // Inline variable declarations without pushing scope
+                n.statements.forEach((s) => this.lower(s));
+              } else {
+                // Real block scope
+                this.push();
+                n.statements.forEach((s) => this.lower(s));
+                this.pop();
+              }
               break;
+            }
             case "If": {
               const c = this.lowerExpr(n.condition);
               if (c.type !== "bool" && c.type !== "int")
@@ -3543,6 +3627,21 @@ int main() {
         else if (name === "asm") el.innerHTML = renderAsm(result);
       }
 
+      function toggleAstFullscreen() {
+        const host = document.getElementById("ast-diagram-root");
+        if (!host) return;
+        const isFs =
+          document.fullscreenElement === host ||
+          document.webkitFullscreenElement === host;
+        if (isFs) {
+          if (document.exitFullscreen) document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          return;
+        }
+        if (host.requestFullscreen) host.requestFullscreen();
+        else if (host.webkitRequestFullscreen) host.webkitRequestFullscreen();
+      }
+
       function renderOutput(r) {
         if (!r.output && r.errors.length === 0)
           return '<div class="output-empty">Program produced no output.</div>';
@@ -3631,131 +3730,344 @@ int main() {
 
         function shortValue(v) {
           if (v === undefined) return "";
-          if (v && typeof v === "object")
-            return v.type ? `<${v.type}>` : "<object>";
-          return JSON.stringify(v);
+          if (typeof v === "string") return JSON.stringify(v);
+          if (typeof v === "number" || typeof v === "boolean")
+            return String(v);
+          return "";
         }
 
-        function normalizeParamNode(p, line) {
-          return { type: "Param", name: p.name, varType: p.type, line };
+        function normalizeExpr(node) {
+          if (!node || typeof node !== "object") return null;
+          switch (node.type) {
+            case "BinOp":
+              return {
+                type: "BinOp",
+                op: node.op,
+                line: node.line,
+                left: normalizeExpr(node.left),
+                right: normalizeExpr(node.right),
+              };
+            case "Unary":
+              return {
+                type: "Unary",
+                op: node.op,
+                line: node.line,
+                expr: normalizeExpr(node.expr),
+              };
+            case "Var":
+              return { type: "Var", name: node.name, line: node.line };
+            case "IntLit":
+            case "BoolLit":
+            case "StringLit":
+              return { type: node.type, value: node.value, line: node.line };
+            case "Call":
+              return {
+                type: "Call",
+                name: node.name,
+                line: node.line,
+                args: (node.args || []).map((a) => normalizeExpr(a)).filter(Boolean),
+              };
+            case "Assign":
+              return {
+                type: "Assign",
+                name: node.name,
+                line: node.line,
+                value: normalizeExpr(node.value),
+              };
+            default:
+              return null;
+          }
+        }
+
+        function normalizeStmt(node) {
+          if (!node || typeof node !== "object") return null;
+          switch (node.type) {
+            case "VarDecl": {
+              const out = {
+                type: "VarDecl",
+                name: node.name,
+                varType: node.varType,
+                line: node.line,
+              };
+              if (node.init) out.value = normalizeExpr(node.init);
+              return out;
+            }
+            case "Assign":
+              return {
+                type: "Assign",
+                name: node.name,
+                line: node.line,
+                value: normalizeExpr(node.value),
+              };
+            case "ExprStmt":
+              return normalizeExpr(node.expression);
+            case "Print":
+              return {
+                type: "Print",
+                line: node.line,
+                args: (node.args || []).map((a) => normalizeExpr(a)).filter(Boolean),
+              };
+            case "Return": {
+              const out = { type: "Return", line: node.line };
+              if (node.value) out.value = normalizeExpr(node.value);
+              return out;
+            }
+            case "If": {
+              const out = {
+                type: "If",
+                line: node.line,
+                condition: normalizeExpr(node.condition),
+                then: normalizeStmtList(node.thenBranch),
+              };
+              if (node.elseBranch) out.else = normalizeStmtList(node.elseBranch);
+              return out;
+            }
+            case "While":
+              return {
+                type: "While",
+                line: node.line,
+                condition: normalizeExpr(node.condition),
+                body: normalizeStmtList(node.body),
+              };
+            case "For":
+              return {
+                type: "For",
+                line: node.line,
+                init: normalizeStmt(node.init),
+                condition: normalizeExpr(node.condition),
+                increment: normalizeExpr(node.increment),
+                body: normalizeStmtList(node.body),
+              };
+            case "Break":
+            case "Continue":
+              return { type: node.type, line: node.line };
+            case "Block":
+              return {
+                type: "Sequence",
+                line: node.line,
+                children: (node.statements || [])
+                  .map((s) => normalizeStmt(s))
+                  .filter(Boolean),
+              };
+            default:
+              return null;
+          }
+        }
+
+        function normalizeStmtList(nodeOrBlock) {
+          if (!nodeOrBlock) return [];
+          if (nodeOrBlock.type === "Block") {
+            return (nodeOrBlock.statements || [])
+              .map((s) => normalizeStmt(s))
+              .filter(Boolean);
+          }
+          const one = normalizeStmt(nodeOrBlock);
+          return one ? [one] : [];
+        }
+
+        function buildActionAST(program) {
+          if (!program || program.type !== "Program") return null;
+          const allFuncs = (program.declarations || []).filter(
+            (d) => d && d.type === "FuncDecl",
+          );
+          const targetFunc =
+            allFuncs.find((f) => f.name === "main") || allFuncs[0] || null;
+          if (!targetFunc) return null;
+          return {
+            type: "Function",
+            name: targetFunc.name,
+            retType: targetFunc.retType,
+            line: targetFunc.line,
+            children: normalizeStmtList(targetFunc.body),
+          };
         }
 
         function nodeLabel(node) {
           if (!node || typeof node !== "object") return "?";
-          let label = node.type || "?";
-          if (node.name) label += `(${node.name})`;
-          if (node.op) label += ` op=${node.op}`;
-          if (node.varType) label += ` type=${node.varType}`;
-          if (node.retType) label += ` ret=${node.retType}`;
-          if (node.value !== undefined && node.type !== "Block")
-            label += ` val=${shortValue(node.value)}`;
-          return label;
+          if (node.type === "Function") return `Function(${node.name})`;
+          if (node.type === "VarDecl") return `VarDecl ${node.varType} ${node.name}`;
+          if (node.type === "Assign") return `Assign(${node.name || "?"})`;
+          if (node.type === "If" || node.type === "While" || node.type === "For")
+            return node.type;
+          if (node.type === "Return" || node.type === "Print") return node.type;
+          if (node.type === "Break" || node.type === "Continue") return node.type;
+          if (node.type === "Call") return `Call(${node.name || "?"})`;
+          if (node.type === "BinOp") return node.op || "?";
+          if (node.type === "Unary") return node.op || "?";
+          if (node.type === "Var") return node.name || "?";
+          if (node.value !== undefined) return shortValue(node.value);
+          if (node.type === "Condition") return "Condition";
+          if (node.type === "Init") return "Init";
+          if (node.type === "Increment") return "Increment";
+          if (node.type === "Then") return "Then";
+          if (node.type === "Else") return "Else";
+          if (node.type === "Body") return "Body";
+          return node.type || "?";
         }
 
         function astChildren(node) {
           const children = [];
           if (!node || typeof node !== "object") return children;
-          const keys = [
-            "declarations",
-            "params",
-            "condition",
-            "init",
-            "left",
-            "right",
-            "expr",
-            "value",
-            "args",
-            "vars",
-            "thenBranch",
-            "elseBranch",
-            "increment",
-            "body",
-            "statements",
-          ];
 
-          if (Array.isArray(node.params)) {
-            node.params.forEach((p) =>
-              children.push(normalizeParamNode(p, node.line)),
-            );
+          if (Array.isArray(node.children)) children.push(...node.children);
+
+          if (node.type === "If") {
+            if (node.condition)
+              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+            if (Array.isArray(node.then) && node.then.length)
+              children.push({ type: "Then", line: node.line, children: node.then });
+            if (Array.isArray(node.else) && node.else.length)
+              children.push({ type: "Else", line: node.line, children: node.else });
+            return children;
           }
 
-          keys.forEach((k) => {
-            if (!node[k]) return;
-            if (k === "params") return;
-            if (Array.isArray(node[k])) {
-              node[k].forEach((c) => {
-                if (c && typeof c === "object") children.push(c);
-              });
-            } else if (typeof node[k] === "object") {
-              children.push(node[k]);
-            }
+          if (node.type === "While") {
+            if (node.condition)
+              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+            if (Array.isArray(node.body) && node.body.length)
+              children.push({ type: "Body", line: node.line, children: node.body });
+            return children;
+          }
+
+          if (node.type === "For") {
+            if (node.init)
+              children.push({ type: "Init", line: node.line, children: [node.init] });
+            if (node.condition)
+              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+            if (node.increment)
+              children.push({ type: "Increment", line: node.line, children: [node.increment] });
+            if (Array.isArray(node.body) && node.body.length)
+              children.push({ type: "Body", line: node.line, children: node.body });
+            return children;
+          }
+
+          if (node.type === "VarDecl" || node.type === "Assign" || node.type === "Return") {
+            if (node.value) children.push(node.value);
+            return children;
+          }
+
+          if (node.type === "Print" || node.type === "Call") {
+            if (Array.isArray(node.args) && node.args.length) children.push(...node.args);
+            return children;
+          }
+
+          ["left", "right", "expr"].forEach((k) => {
+            if (node[k] && typeof node[k] === "object") children.push(node[k]);
           });
           return children;
         }
 
-        function buildAscii(node, prefix, isLast, lines) {
-          const branch = prefix === "" ? "" : isLast ? "`- " : "|- ";
+        function buildAscii(node, prefix, isLast, lines, isRoot = false) {
+          const branch = isRoot ? "" : isLast ? "└── " : "├── ";
           lines.push(prefix + branch + nodeLabel(node));
           const kids = astChildren(node);
-          const nextPrefix =
-            prefix + (prefix === "" ? "" : isLast ? "   " : "|  ");
+          const nextPrefix = prefix + (isRoot ? "" : isLast ? "    " : "│   ");
           kids.forEach((c, i) =>
-            buildAscii(c, nextPrefix, i === kids.length - 1, lines),
+            buildAscii(c, nextPrefix, i === kids.length - 1, lines, false),
           );
         }
 
-        const asciiLines = [];
-        buildAscii(r.ast, "", true, asciiLines);
-        const asciiHtml = `<div style="margin-bottom:12px"><div class="ast-prop" style="margin-bottom:6px">AST (Text Tree)</div><pre style="margin:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:11px;line-height:1.5;white-space:pre;overflow:auto">${escHtml(asciiLines.join("\n"))}</pre></div>`;
-
-        function nodeHtml(node, depth = 0) {
-          if (!node || typeof node !== "object") return "";
-          const type = node.type || "?";
-          const colorClass = `ast-color-${type}`;
-          let props = "";
-          if (node.name)
-            props += ` <span class="ast-prop">name="${node.name}"</span>`;
-          if (node.varType)
-            props += ` <span class="ast-prop">type="${node.varType}"</span>`;
-          if (node.retType)
-            props += ` <span class="ast-prop">ret="${node.retType}"</span>`;
-          if (node.op)
-            props += ` <span class="ast-prop">op="${node.op}"</span>`;
-          if (node.value !== undefined && node.type !== "Block")
-            props += ` <span class="ast-prop">val=${escHtml(shortValue(node.value))}</span>`;
-          let children = "";
-          if (Array.isArray(node.params))
-            node.params.forEach((p) => {
-              children += nodeHtml(normalizeParamNode(p, node.line), depth + 1);
-            });
-          const childKeys = [
-            "declarations",
-            "condition",
-            "init",
-            "left",
-            "right",
-            "expr",
-            "value",
-            "args",
-            "vars",
-            "thenBranch",
-            "elseBranch",
-            "increment",
-            "body",
-            "statements",
-          ];
-          childKeys.forEach((k) => {
-            if (node[k]) {
-              if (Array.isArray(node[k]))
-                node[k].forEach((c) => {
-                  children += nodeHtml(c, depth + 1);
-                });
-              else children += nodeHtml(node[k], depth + 1);
-            }
-          });
-          return `<div class="ast-node"><div class="ast-node-header"><span class="ast-node-type ${colorClass}">◆ ${type}</span>${props}<span class="ast-prop" style="margin-left:auto">L${node.line || "?"}</span></div>${children}</div>`;
+        function diagramLabel(node) {
+          if (!node || typeof node !== "object") return "?";
+          if (node.type === "Function") return `fn ${node.name || "?"}`;
+          if (node.type === "VarDecl") return `${node.varType || "var"} ${node.name || "?"}`;
+          if (node.type === "Assign") return "=";
+          if (node.type === "If" || node.type === "While" || node.type === "For")
+            return node.type.toLowerCase();
+          if (node.type === "Return" || node.type === "Print")
+            return node.type.toLowerCase();
+          if (node.type === "Call") return `call ${node.name || "?"}`;
+          if (node.type === "Condition" || node.type === "Then" || node.type === "Else")
+            return node.type.toLowerCase();
+          if (node.type === "Init" || node.type === "Increment" || node.type === "Body")
+            return node.type.toLowerCase();
+          if (node.type === "BinOp") return node.op || "?";
+          if (node.type === "Unary") return node.op || "?";
+          if (node.type === "Var") return node.name || "?";
+          if (node.value !== undefined) return shortValue(node.value);
+          return node.type || "?";
         }
-        return `${asciiHtml}<div style="font-size:12px">${nodeHtml(r.ast)}</div>`;
+
+        function renderAstDiagram(root) {
+          const nodes = [];
+          const edges = [];
+          let nextLeaf = 0;
+
+          function visit(node, depth = 0, parentId = null) {
+            if (!node || typeof node !== "object") return null;
+            const kids = astChildren(node);
+            const id = `n${nodes.length}`;
+            const entry = { id, node, depth, kids: [] };
+            nodes.push(entry);
+
+            if (!kids.length) {
+              entry.slot = nextLeaf++;
+            } else {
+              const childRefs = kids
+                .map((k) => visit(k, depth + 1, id))
+                .filter(Boolean);
+              entry.kids = childRefs;
+              if (childRefs.length) {
+                const first = childRefs[0].slot;
+                const last = childRefs[childRefs.length - 1].slot;
+                entry.slot = (first + last) / 2;
+              } else {
+                entry.slot = nextLeaf++;
+              }
+            }
+
+            if (parentId) edges.push({ from: parentId, to: id });
+            return entry;
+          }
+
+          const rootRef = visit(root, 0, null);
+          if (!rootRef || !nodes.length) {
+            return '<div class="output-empty">No diagram data</div>';
+          }
+
+          const colW = 92;
+          const rowH = 62;
+          const marginX = 56;
+          const marginY = 18;
+
+          let maxDepth = 0;
+          let maxSlot = 0;
+          nodes.forEach((n) => {
+            n.x = marginX + n.slot * colW;
+            n.y = marginY + n.depth * rowH;
+            if (n.depth > maxDepth) maxDepth = n.depth;
+            if (n.slot > maxSlot) maxSlot = n.slot;
+          });
+
+          const width = Math.max(420, Math.ceil(marginX * 2 + (maxSlot + 1) * colW));
+          const height = Math.max(180, marginY * 2 + (maxDepth + 1) * rowH);
+          const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+
+          const edgeSvg = edges
+            .map((e) => {
+              const a = byId[e.from];
+              const b = byId[e.to];
+              if (!a || !b) return "";
+              return `<line x1="${a.x}" y1="${a.y + 8}" x2="${b.x}" y2="${b.y - 8}" stroke="var(--text2)" stroke-width="1.2" />`;
+            })
+            .join("");
+
+          const nodeSvg = nodes
+            .map((n) => {
+              const label = escHtml(diagramLabel(n.node));
+              return `<text x="${n.x}" y="${n.y + 4}" text-anchor="middle" fill="var(--text)" font-size="12" font-family="Consolas,'Courier New',monospace">${label}</text>`;
+            })
+            .join("");
+
+          return `<div id="ast-diagram-root" style="margin-bottom:12px"><div class="ast-toolbar"><button class="ast-fullscreen-btn" onclick="toggleAstFullscreen()">Fullscreen AST</button></div><div class="ast-prop" style="margin-bottom:6px">AST (Diagram)</div><div class="ast-diagram-shell"><svg class="ast-diagram-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Abstract Syntax Tree diagram">${edgeSvg}${nodeSvg}</svg></div></div>`;
+        }
+
+        const actionRoot = buildActionAST(r.ast);
+        if (!actionRoot)
+          return '<div class="output-empty">No action AST found</div>';
+
+        const diagramHtml = renderAstDiagram(actionRoot);
+        return diagramHtml;
       }
 
       function renderIR(r) {

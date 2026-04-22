@@ -294,11 +294,21 @@ class Parser {
       const body=this.parseBlock();
       return new FuncDeclNode(typeTok.value,name,params,body,line);
     }
-    // Variable declaration
+    // Variable declaration(s) — support comma-separated
+    const decls=[]; 
     let init=null;
     if(this.match(TokenType.ASSIGN)) init=this.parseExpr();
+    decls.push(new VarDeclNode(typeTok.value,name,init,line));
+    while(this.match(TokenType.COMMA)){
+      const varName=this.consume(TokenType.IDENTIFIER,"Expected identifier after ','").value;
+      let varInit=null;
+      if(this.match(TokenType.ASSIGN)) varInit=this.parseExpr();
+      decls.push(new VarDeclNode(typeTok.value,varName,varInit,line));
+    }
     this.consume(TokenType.SEMICOLON,"Expected ';' after variable declaration");
-    return new VarDeclNode(typeTok.value,name,init,line);
+    // If single declaration, return it; otherwise wrap in block
+    if(decls.length===1) return decls[0];
+    return new BlockNode(decls,line);
   }
 
   parseBlock(){
@@ -746,11 +756,20 @@ class SinglePassCompiler extends IRGen {
         this.emit('FUNC_END',node.name,null,null);
         break;
       }
-      case 'Block':
-        this.pushScope();
-        node.statements.forEach(s=>this.lower(s));
-        this.popScope();
+      case 'Block': {
+        // Check if this is a pseudo-block from comma-separated variable declarations
+        const isVarDeclBlock = node.statements && node.statements.every(s => s && s.type === 'VarDecl');
+        if (isVarDeclBlock) {
+          // Inline variable declarations without pushing scope
+          node.statements.forEach(s => this.lower(s));
+        } else {
+          // Real block scope
+          this.pushScope();
+          node.statements.forEach(s => this.lower(s));
+          this.popScope();
+        }
         break;
+      }
       case 'If': {
         const cond=this.lowerExpr(node.condition);
         if(cond.type!=='bool'&&cond.type!=='int') this.error('If condition must be bool or int',node.line);
