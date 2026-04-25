@@ -716,6 +716,219 @@
         flex-shrink: 0;
       }
 
+      /* ── SYMBOL TABLE ── */
+      .symtab-wrap {
+        padding: 2px 0;
+      }
+      .symtab-stats {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+        padding: 8px 12px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .symtab-stat {
+        font-size: 11px;
+        color: var(--text2);
+      }
+      .symtab-stat span {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .symtab-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+      .symtab-search {
+        flex: 1;
+        min-width: 140px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        padding: 5px 10px;
+        outline: none;
+      }
+      .symtab-search:focus {
+        border-color: var(--accent);
+      }
+      .symtab-filter {
+        display: flex;
+        gap: 4px;
+      }
+      .symtab-fbtn {
+        padding: 4px 10px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text2);
+        font-size: 10px;
+        font-family: "JetBrains Mono", monospace;
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .symtab-fbtn.active {
+        background: rgba(74, 222, 128, 0.12);
+        border-color: rgba(74, 222, 128, 0.4);
+        color: var(--accent);
+      }
+      .symtab-fbtn:hover:not(.active) {
+        background: var(--surface3);
+        color: var(--text);
+      }
+      .symtab-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .symtab-table th {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        padding: 7px 10px;
+        text-align: left;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text3);
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+      .symtab-table th:hover {
+        color: var(--text);
+        background: var(--surface3);
+      }
+      .symtab-table th.sym-sort-asc::after {
+        content: " ▲";
+        color: var(--accent);
+      }
+      .symtab-table th.sym-sort-desc::after {
+        content: " ▼";
+        color: var(--accent);
+      }
+      .symtab-table td {
+        border: 1px solid var(--border);
+        padding: 6px 10px;
+        vertical-align: middle;
+        line-height: 1.6;
+      }
+      .symtab-table tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.012);
+      }
+      .symtab-table tr:hover td {
+        background: rgba(74, 222, 128, 0.04);
+      }
+      .sym-name {
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .sym-name-func {
+        color: var(--warn);
+      }
+      .sym-name-var {
+        color: var(--accent2);
+      }
+      .sym-name-param {
+        color: var(--accent3);
+      }
+      .sym-kind {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .sym-kind-func {
+        background: rgba(251, 146, 60, 0.15);
+        color: var(--warn);
+        border: 1px solid rgba(251, 146, 60, 0.3);
+      }
+      .sym-kind-var {
+        background: rgba(34, 211, 238, 0.1);
+        color: var(--accent2);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+      }
+      .sym-kind-param {
+        background: rgba(167, 139, 250, 0.12);
+        color: var(--accent3);
+        border: 1px solid rgba(167, 139, 250, 0.3);
+      }
+      .sym-type {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 3px;
+        font-size: 10px;
+        background: var(--surface3);
+        border: 1px solid var(--border);
+      }
+      .sym-type-int {
+        color: #fb923c;
+      }
+      .sym-type-bool {
+        color: #a78bfa;
+      }
+      .sym-type-void {
+        color: #475569;
+      }
+      .sym-type-string {
+        color: #4ade80;
+      }
+      .sym-size {
+        color: var(--token-num);
+        font-weight: 600;
+        font-size: 11px;
+      }
+      .sym-scope {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 3px;
+        font-size: 10px;
+        background: var(--surface2);
+        color: var(--text2);
+        border: 1px solid var(--border);
+      }
+      .sym-line {
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 11px;
+      }
+      .sym-usage-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+      }
+      .sym-usage-chip {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        background: var(--surface3);
+        border: 1px solid var(--border);
+        color: var(--text2);
+        font-size: 10px;
+      }
+      .sym-none {
+        color: var(--text3);
+        font-style: italic;
+        font-size: 10px;
+      }
+      .sym-params {
+        color: var(--text3);
+        font-size: 10px;
+      }
+
       /* Scrollbars */
       ::-webkit-scrollbar {
         width: 5px;
@@ -1006,6 +1219,9 @@
           <div class="output-tab" onclick="showTab('ir')" id="tab-ir">⊞ IR</div>
           <div class="output-tab" onclick="showTab('asm')" id="tab-asm">
             ≋ Assembly
+          </div>
+          <div class="output-tab" onclick="showTab('symtab')" id="tab-symtab">
+            ⊕ Symbols
           </div>
         </div>
         <div class="output-content" id="outputContent">
@@ -2221,15 +2437,56 @@
           this.currentFunc = null;
           this.loopDepth = 0;
           this.errors = [];
+          // ── Symbol Table ──
+          this._symTable = []; // flat list of all declared symbols
+          this._funcCtx = "global"; // current function name for scope tracking
+          this._scopeDepth = 0; // nesting depth for block scopes
         }
         err(m, l) {
           this.errors.push(new SemanticError(m, l));
         }
         push() {
+          this._scopeDepth++;
           this.scope = new SymbolTable(this.scope);
         }
         pop() {
+          this._scopeDepth--;
           this.scope = this.scope.parent;
+        }
+
+        // ─── Symbol Table helpers ───────────────────────────────────
+        // Size in bytes per type
+        _sizeOf(type) {
+          return { int: 4, bool: 1, string: 8, void: 0 }[type] ?? 4;
+        }
+        // Record a symbol being declared
+        _symDeclare(name, kind, type, declLine, extra = {}) {
+          this._symTable.push({
+            name,
+            kind,
+            type,
+            size: kind === "func" ? "—" : this._sizeOf(type) + " B",
+            scope: this._funcCtx,
+            scopeDepth: this._scopeDepth,
+            declLine,
+            usageLines: [],
+            ...extra,
+          });
+        }
+        // Record a usage of a symbol (by name, at a given line)
+        _symUse(name, line) {
+          // Walk backwards so we find the most recently declared matching symbol
+          for (let i = this._symTable.length - 1; i >= 0; i--) {
+            if (this._symTable[i].name === name) {
+              if (!this._symTable[i].usageLines.includes(line))
+                this._symTable[i].usageLines.push(line);
+              return;
+            }
+          }
+        }
+        // Expose collected table
+        get symbolTable() {
+          return this._symTable;
         }
         canAssign(targetType, valueType) {
           return (
@@ -2262,6 +2519,7 @@
                 this.emit("ASSIGN", rhs.place, null, n.name);
               } else this.emit("DECLARE", n.varType, null, n.name);
               this.scope.define(n.name, { varType: n.varType, kind: "var" });
+              this._symDeclare(n.name, "var", n.varType, n.line);
               break;
             }
             case "FuncDecl": {
@@ -2272,24 +2530,34 @@
                 kind: "func",
                 params: n.params,
               });
+              this._symDeclare(n.name, "func", n.retType, n.line, {
+                params: n.params.map((p) => `${p.type} ${p.name}`),
+              });
               this.emit("FUNC_BEGIN", n.name);
               const prev = this.currentFunc;
+              const prevCtx = this._funcCtx;
               this.currentFunc = { retType: n.retType, name: n.name };
+              this._funcCtx = n.name;
               this.push();
               n.params.forEach((p) => {
                 this.scope.define(p.name, { varType: p.type, kind: "param" });
                 this.emit("PARAM", p.type, null, p.name);
+                this._symDeclare(p.name, "param", p.type, n.line, {
+                  parentFunc: n.name,
+                });
               });
               this.lower(n.body);
               this.pop();
               this.currentFunc = prev;
+              this._funcCtx = prevCtx;
               this.emit("FUNC_END", n.name);
               break;
             }
             case "Block": {
               // Check if this is a pseudo-block from comma-separated variable declarations
               const isVarDeclBlock =
-                n.statements && n.statements.every((s) => s && s.type === "VarDecl");
+                n.statements &&
+                n.statements.every((s) => s && s.type === "VarDecl");
               if (isVarDeclBlock) {
                 // Inline variable declarations without pushing scope
                 n.statements.forEach((s) => this.lower(s));
@@ -2387,6 +2655,7 @@
               n.vars.forEach((v) => {
                 const s = this.scope.lookup(v.name);
                 if (!s) this.err(`Undeclared variable '${v.name}'`, n.line);
+                this._symUse(v.name, n.line);
                 this.emit("INPUT", null, null, v.name);
               });
               break;
@@ -2407,6 +2676,7 @@
               if (s && !this.canAssign(s.varType, rhs.type))
                 this.err(`Cannot assign '${rhs.type}' to '${n.name}'`, n.line);
               this.emit("ASSIGN", rhs.place, null, n.name);
+              this._symUse(n.name, n.line);
               return { type: s?.varType || "int", place: n.name };
             }
             case "BinOp": {
@@ -2481,11 +2751,13 @@
               args.forEach((a) => this.emit("ARG", a.place));
               const t = this.tmp();
               this.emit("CALL", n.name, args.length, t);
+              this._symUse(n.name, n.line);
               return { type: s?.varType || "unknown", place: t };
             }
             case "Var": {
               const s = this.scope.lookup(n.name);
               if (!s) this.err(`Undeclared variable '${n.name}'`, n.line);
+              this._symUse(n.name, n.line);
               return { type: s?.varType || "int", place: n.name };
             }
             case "IntLit":
@@ -2947,6 +3219,7 @@
           output: "",
           errors: [],
           phases: {},
+          symbolTable: [],
           stats: { lines: 0, tokens: 0, instructions: 0, errors: 0 },
           success: false,
         };
@@ -3047,6 +3320,7 @@
           };
           res.ir = singlePass.format();
           res.stats.instructions = singlePass.instructions.length;
+          res.symbolTable = singlePass.symbolTable;
           res.phases.irgen = { time: spTime, ok: true };
         } catch (e) {
           res.errors.push({
@@ -3625,6 +3899,179 @@ int main() {
         else if (name === "ast") el.innerHTML = renderAST(result);
         else if (name === "ir") el.innerHTML = renderIR(result);
         else if (name === "asm") el.innerHTML = renderAsm(result);
+        else if (name === "symtab") el.innerHTML = renderSymTab(result);
+      }
+
+      // ── Symbol Table state ──
+      let _symSortCol = "declLine";
+      let _symSortDir = 1; // 1 = asc, -1 = desc
+      let _symFilter = "all";
+      let _symSearch = "";
+
+      function renderSymTab(r) {
+        if (!r.ast)
+          return '<div class="output-empty">Run the compiler first to build the symbol table.</div>';
+        if (!r.symbolTable || r.symbolTable.length === 0)
+          return '<div class="output-empty">No symbols found — write a program with variables or functions and compile.</div>';
+
+        const all = r.symbolTable;
+        const nFuncs = all.filter((s) => s.kind === "func").length;
+        const nVars = all.filter((s) => s.kind === "var").length;
+        const nParams = all.filter((s) => s.kind === "param").length;
+
+        // filter
+        let rows = all.filter((s) => {
+          if (_symFilter !== "all" && s.kind !== _symFilter) return false;
+          if (_symSearch) {
+            const q = _symSearch.toLowerCase();
+            return (
+              s.name.toLowerCase().includes(q) ||
+              s.type.toLowerCase().includes(q) ||
+              s.scope.toLowerCase().includes(q)
+            );
+          }
+          return true;
+        });
+
+        // sort
+        rows = [...rows].sort((a, b) => {
+          let av = a[_symSortCol],
+            bv = b[_symSortCol];
+          if (_symSortCol === "usageLines") {
+            av = a.usageLines.length;
+            bv = b.usageLines.length;
+          }
+          if (typeof av === "number" && typeof bv === "number")
+            return (av - bv) * _symSortDir;
+          return String(av ?? "").localeCompare(String(bv ?? "")) * _symSortDir;
+        });
+
+        // helpers
+        const H = (s) =>
+          String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
+        function kindBadge(k) {
+          const label = k === "func" ? "function" : k;
+          return `<span class="sym-kind sym-kind-${k}">${label}</span>`;
+        }
+        function typeBadge(t) {
+          return `<span class="sym-type sym-type-${t}">${H(t)}</span>`;
+        }
+        function scopeBadge(s, depth) {
+          const label = depth === 0 ? "global" : s;
+          return `<span class="sym-scope">${H(label)}</span>`;
+        }
+        function usageChips(lines) {
+          if (!lines || lines.length === 0)
+            return '<span class="sym-none">—</span>';
+          return (
+            '<div class="sym-usage-wrap">' +
+            [...lines]
+              .sort((a, b) => a - b)
+              .map((l) => `<span class="sym-usage-chip">L${l}</span>`)
+              .join("") +
+            "</div>"
+          );
+        }
+        function thCell(label, col, tip) {
+          let cls =
+            _symSortCol === col
+              ? _symSortDir === 1
+                ? "sym-sort-asc"
+                : "sym-sort-desc"
+              : "";
+          return `<th class="${cls}" title="${tip || label}" onclick="symTabSort('${col}')">${label}</th>`;
+        }
+
+        // table rows
+        let tbody = "";
+        if (rows.length === 0) {
+          tbody = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3);font-style:italic">No symbols match the current filter.</td></tr>`;
+        } else {
+          rows.forEach((s) => {
+            const nc = `sym-name sym-name-${s.kind}`;
+            // extra info: params list for functions, parent func for params
+            let extra = "—";
+            if (s.kind === "func") {
+              extra =
+                s.params && s.params.length
+                  ? `<span class="sym-params">(${s.params.map(H).join(", ")})</span>`
+                  : '<span class="sym-none">no params</span>';
+            } else if (s.kind === "param" && s.parentFunc) {
+              extra = `<span class="sym-params">→ ${H(s.parentFunc)}()</span>`;
+            }
+
+            tbody += `<tr>
+              <td><span class="${nc}">${H(s.name)}</span></td>
+              <td>${kindBadge(s.kind)}</td>
+              <td>${typeBadge(s.type)}</td>
+              <td><span class="sym-size">${H(String(s.size))}</span></td>
+              <td>${scopeBadge(s.scope, s.scopeDepth)}</td>
+              <td style="text-align:center"><span class="sym-line">${s.declLine}</span></td>
+              <td>${usageChips(s.usageLines)}</td>
+              <td>${extra}</td>
+            </tr>`;
+          });
+        }
+
+        const filterBtns = ["all", "func", "var", "param"]
+          .map(
+            (f) =>
+              `<button class="symtab-fbtn${_symFilter === f ? " active" : ""}" onclick="symTabFilter('${f}')">${f === "all" ? "All" : f === "func" ? "Functions" : f === "var" ? "Variables" : "Params"}</button>`,
+          )
+          .join("");
+
+        return `<div class="symtab-wrap">
+          <div class="symtab-stats">
+            <div class="symtab-stat">Total <span>${all.length}</span></div>
+            <div class="symtab-stat">Functions <span>${nFuncs}</span></div>
+            <div class="symtab-stat">Variables <span>${nVars}</span></div>
+            <div class="symtab-stat">Parameters <span>${nParams}</span></div>
+            <div class="symtab-stat">Showing <span>${rows.length}</span></div>
+          </div>
+          <div class="symtab-controls">
+            <input class="symtab-search" id="symSearchBox" type="text"
+              placeholder="🔍 Search name, type or scope…"
+              value="${H(_symSearch)}"
+              oninput="symTabSearch(this.value)" />
+            <div class="symtab-filter">${filterBtns}</div>
+          </div>
+          <table class="symtab-table">
+            <thead><tr>
+              ${thCell("Name", "name", "Symbol identifier")}
+              ${thCell("Kind", "kind", "function / variable / param")}
+              ${thCell("Data Type", "type", "Declared data type")}
+              ${thCell("Size", "size", "Memory size in bytes")}
+              ${thCell("Scope", "scope", "Declared in: function name or global")}
+              ${thCell("Decl Line", "declLine", "Line where symbol is declared")}
+              ${thCell("Used At", "usageLines", "Lines where symbol is referenced")}
+              ${thCell("Extra", "_x", "Params for functions; parent func for params")}
+            </tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>`;
+      }
+
+      // ── Symbol Table interactive callbacks ──
+      function symTabSort(col) {
+        if (_symSortCol === col) _symSortDir *= -1;
+        else {
+          _symSortCol = col;
+          _symSortDir = 1;
+        }
+        if (lastResult) renderTab("symtab", lastResult);
+      }
+      function symTabFilter(f) {
+        _symFilter = f;
+        if (lastResult) renderTab("symtab", lastResult);
+      }
+      function symTabSearch(val) {
+        _symSearch = val;
+        if (lastResult) renderTab("symtab", lastResult);
       }
 
       function toggleAstFullscreen() {
@@ -3635,7 +4082,8 @@ int main() {
           document.webkitFullscreenElement === host;
         if (isFs) {
           if (document.exitFullscreen) document.exitFullscreen();
-          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          else if (document.webkitExitFullscreen)
+            document.webkitExitFullscreen();
           return;
         }
         if (host.requestFullscreen) host.requestFullscreen();
@@ -3731,8 +4179,7 @@ int main() {
         function shortValue(v) {
           if (v === undefined) return "";
           if (typeof v === "string") return JSON.stringify(v);
-          if (typeof v === "number" || typeof v === "boolean")
-            return String(v);
+          if (typeof v === "number" || typeof v === "boolean") return String(v);
           return "";
         }
 
@@ -3765,7 +4212,9 @@ int main() {
                 type: "Call",
                 name: node.name,
                 line: node.line,
-                args: (node.args || []).map((a) => normalizeExpr(a)).filter(Boolean),
+                args: (node.args || [])
+                  .map((a) => normalizeExpr(a))
+                  .filter(Boolean),
               };
             case "Assign":
               return {
@@ -3805,7 +4254,9 @@ int main() {
               return {
                 type: "Print",
                 line: node.line,
-                args: (node.args || []).map((a) => normalizeExpr(a)).filter(Boolean),
+                args: (node.args || [])
+                  .map((a) => normalizeExpr(a))
+                  .filter(Boolean),
               };
             case "Return": {
               const out = { type: "Return", line: node.line };
@@ -3819,7 +4270,8 @@ int main() {
                 condition: normalizeExpr(node.condition),
                 then: normalizeStmtList(node.thenBranch),
               };
-              if (node.elseBranch) out.else = normalizeStmtList(node.elseBranch);
+              if (node.elseBranch)
+                out.else = normalizeStmtList(node.elseBranch);
               return out;
             }
             case "While":
@@ -3885,12 +4337,18 @@ int main() {
         function nodeLabel(node) {
           if (!node || typeof node !== "object") return "?";
           if (node.type === "Function") return `Function(${node.name})`;
-          if (node.type === "VarDecl") return `VarDecl ${node.varType} ${node.name}`;
+          if (node.type === "VarDecl")
+            return `VarDecl ${node.varType} ${node.name}`;
           if (node.type === "Assign") return `Assign(${node.name || "?"})`;
-          if (node.type === "If" || node.type === "While" || node.type === "For")
+          if (
+            node.type === "If" ||
+            node.type === "While" ||
+            node.type === "For"
+          )
             return node.type;
           if (node.type === "Return" || node.type === "Print") return node.type;
-          if (node.type === "Break" || node.type === "Continue") return node.type;
+          if (node.type === "Break" || node.type === "Continue")
+            return node.type;
           if (node.type === "Call") return `Call(${node.name || "?"})`;
           if (node.type === "BinOp") return node.op || "?";
           if (node.type === "Unary") return node.op || "?";
@@ -3913,41 +4371,82 @@ int main() {
 
           if (node.type === "If") {
             if (node.condition)
-              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+              children.push({
+                type: "Condition",
+                line: node.line,
+                children: [node.condition],
+              });
             if (Array.isArray(node.then) && node.then.length)
-              children.push({ type: "Then", line: node.line, children: node.then });
+              children.push({
+                type: "Then",
+                line: node.line,
+                children: node.then,
+              });
             if (Array.isArray(node.else) && node.else.length)
-              children.push({ type: "Else", line: node.line, children: node.else });
+              children.push({
+                type: "Else",
+                line: node.line,
+                children: node.else,
+              });
             return children;
           }
 
           if (node.type === "While") {
             if (node.condition)
-              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+              children.push({
+                type: "Condition",
+                line: node.line,
+                children: [node.condition],
+              });
             if (Array.isArray(node.body) && node.body.length)
-              children.push({ type: "Body", line: node.line, children: node.body });
+              children.push({
+                type: "Body",
+                line: node.line,
+                children: node.body,
+              });
             return children;
           }
 
           if (node.type === "For") {
             if (node.init)
-              children.push({ type: "Init", line: node.line, children: [node.init] });
+              children.push({
+                type: "Init",
+                line: node.line,
+                children: [node.init],
+              });
             if (node.condition)
-              children.push({ type: "Condition", line: node.line, children: [node.condition] });
+              children.push({
+                type: "Condition",
+                line: node.line,
+                children: [node.condition],
+              });
             if (node.increment)
-              children.push({ type: "Increment", line: node.line, children: [node.increment] });
+              children.push({
+                type: "Increment",
+                line: node.line,
+                children: [node.increment],
+              });
             if (Array.isArray(node.body) && node.body.length)
-              children.push({ type: "Body", line: node.line, children: node.body });
+              children.push({
+                type: "Body",
+                line: node.line,
+                children: node.body,
+              });
             return children;
           }
 
-          if (node.type === "VarDecl" || node.type === "Assign" || node.type === "Return") {
+          if (
+            node.type === "VarDecl" ||
+            node.type === "Assign" ||
+            node.type === "Return"
+          ) {
             if (node.value) children.push(node.value);
             return children;
           }
 
           if (node.type === "Print" || node.type === "Call") {
-            if (Array.isArray(node.args) && node.args.length) children.push(...node.args);
+            if (Array.isArray(node.args) && node.args.length)
+              children.push(...node.args);
             return children;
           }
 
@@ -3970,16 +4469,29 @@ int main() {
         function diagramLabel(node) {
           if (!node || typeof node !== "object") return "?";
           if (node.type === "Function") return `fn ${node.name || "?"}`;
-          if (node.type === "VarDecl") return `${node.varType || "var"} ${node.name || "?"}`;
+          if (node.type === "VarDecl")
+            return `${node.varType || "var"} ${node.name || "?"}`;
           if (node.type === "Assign") return "=";
-          if (node.type === "If" || node.type === "While" || node.type === "For")
+          if (
+            node.type === "If" ||
+            node.type === "While" ||
+            node.type === "For"
+          )
             return node.type.toLowerCase();
           if (node.type === "Return" || node.type === "Print")
             return node.type.toLowerCase();
           if (node.type === "Call") return `call ${node.name || "?"}`;
-          if (node.type === "Condition" || node.type === "Then" || node.type === "Else")
+          if (
+            node.type === "Condition" ||
+            node.type === "Then" ||
+            node.type === "Else"
+          )
             return node.type.toLowerCase();
-          if (node.type === "Init" || node.type === "Increment" || node.type === "Body")
+          if (
+            node.type === "Init" ||
+            node.type === "Increment" ||
+            node.type === "Body"
+          )
             return node.type.toLowerCase();
           if (node.type === "BinOp") return node.op || "?";
           if (node.type === "Unary") return node.op || "?";
@@ -4039,7 +4551,10 @@ int main() {
             if (n.slot > maxSlot) maxSlot = n.slot;
           });
 
-          const width = Math.max(420, Math.ceil(marginX * 2 + (maxSlot + 1) * colW));
+          const width = Math.max(
+            420,
+            Math.ceil(marginX * 2 + (maxSlot + 1) * colW),
+          );
           const height = Math.max(180, marginY * 2 + (maxDepth + 1) * rowH);
           const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
 
